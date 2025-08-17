@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>Psychedelic Sketch — Turbulence Edition</title>
+<title>Psychedelic Sketch — Sensor Painter</title>
 <style>
   :root {
     --bg: #050508;
@@ -89,7 +89,7 @@
     position: fixed;
     left: 10px; right: 10px;
     top: calc(env(safe-area-inset-top, 8px) + 54px);
-    max-width: 880px;
+    max-width: 940px;
     margin: 0 auto;
     background: var(--panel);
     border: 1px solid rgba(255,255,255,0.1);
@@ -111,7 +111,7 @@
   @media (min-width: 720px) {
     .grid { grid-template-columns: repeat(3, 1fr); }
   }
-  @media (min-width: 1040px) {
+  @media (min-width: 1080px) {
     .grid { grid-template-columns: repeat(4, 1fr); }
   }
   .control {
@@ -182,7 +182,7 @@
 
   <div class="topbar">
     <button id="menuBtn" class="btn" aria-label="Settings"><span class="icon">⚙️</span> Settings</button>
-    <div class="chip" id="hint">tap + drag • try turbulence • enable sensors</div>
+    <div class="chip" id="hint">tap + drag • or enable Sensors → Motion to draw by moving</div>
     <div style="display:flex; gap:8px;">
       <button id="sensorBtn" class="btn" aria-label="Enable sensors"><span class="icon">📳</span> Sensors</button>
       <button id="saveBtn" class="btn" aria-label="Save"><span class="icon">📸</span></button>
@@ -207,9 +207,9 @@
 
       <div class="control">
         <label>Brush size <span id="sizeVal"></span></label>
-        <input type="range" id="size" min="1" max="100" step="1" value="28" />
+        <input type="range" id="size" min="1" max="100" step="1" value="30" />
         <label>Glow <span id="glowVal"></span></label>
-        <input type="range" id="glow" min="0" max="68" step="1" value="24" />
+        <input type="range" id="glow" min="0" max="70" step="1" value="26" />
         <div class="row">
           <button id="brushSoft" class="btn pill active">Soft</button>
           <button id="brushSpray" class="btn pill">Spray</button>
@@ -229,7 +229,7 @@
         <label>Trail fade <span id="fadeVal"></span></label>
         <input type="range" id="fade" min="0" max="0.25" step="0.005" value="0.035" />
         <label>Scatter <span id="scatterVal"></span></label>
-        <input type="range" id="scatter" min="0" max="1" step="0.01" value="0.22" />
+        <input type="range" id="scatter" min="0" max="1" step="0.01" value="0.2" />
       </div>
 
       <div class="control">
@@ -252,14 +252,17 @@
         <label>Sensor mode
           <select id="sensorMode">
             <option value="off">Off</option>
-            <option value="orientation">Orientation</option>
-            <option value="motion">Motion</option>
+            <option value="orientation">Orientation (tilt draws)</option>
+            <option value="motion">Motion (move draws)</option>
           </select>
         </label>
         <label>Sensor influence <span id="sensorInfVal"></span></label>
-        <input type="range" id="sensorInf" min="0" max="1" step="0.01" value="0.5" />
+        <input type="range" id="sensorInf" min="0" max="1" step="0.01" value="0.65" />
+        <label>Motion sensitivity <span id="motionSensVal"></span></label>
+        <input type="range" id="motionSens" min="0.2" max="3" step="0.05" value="1.2" />
         <div class="row">
           <button id="shakeClear" class="btn pill">Shake clears</button>
+          <button id="sensorTrail" class="btn pill active">Sensor draws</button>
         </div>
       </div>
 
@@ -280,8 +283,8 @@
       <div class="control">
         <label>Quality
           <select id="quality">
-            <option value="balanced" selected>Balanced</option>
             <option value="performance">Performance</option>
+            <option value="balanced" selected>Balanced</option>
             <option value="high">High</option>
           </select>
         </label>
@@ -292,7 +295,7 @@
     </div>
   </div>
 
-  <div class="legend" id="legend">draw with one finger • try Curl turbulence • Auto draws for you</div>
+  <div class="legend" id="legend">Sensors: Orientation = tilt draws • Motion = move draws • Shake to clear</div>
 
   <div class="bottombar">
     <button id="clearBtn" class="fab secondary">Clear</button>
@@ -304,51 +307,54 @@
 (function(){
   'use strict';
 
-  // Canvas + DPR setup (simple quality tiers to stay mobile-friendly)
+  // Canvas + DPR setup
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d', { alpha: true });
-  let DPR_MAX = 2; // adjusted by quality setting
+  let DPR_MAX = 2;
   let DPR = Math.min(DPR_MAX, window.devicePixelRatio || 1);
 
   const state = {
     width: 0, height: 0, cx: 0, cy: 0,
-    drawing: false,
-    // brushes
+    // drawing
     brush: 'soft', // 'soft'|'spray'
-    brushSize: 28,
-    glow: 24,
-    // symmetry
+    brushSize: 30,
+    glow: 26,
     symmetry: 10,
     kaleido: true,
     mirror: false,
-    rotOffset: 0, // symmetry rotation offset
-    // visuals
+    rotOffset: 0,
     palette: 'Rainbow',
     colorSpeed: 0.48,
-    colorOffset: Math.random() * 360,
-    scatter: 0.22,
+    colorOffset: Math.random()*360,
+    scatter: 0.2,
     fade: 0.035,
-    composite: 'lighter', // or 'source-over'
+    composite: 'lighter',
     bgMode: 'dark',
     // turbulence
-    turbMode: 'curl', // 'off'|'noise'|'curl'
+    turbMode: 'curl',
     turbInt: 0.65,
     turbScale: 0.009,
     turbSpeed: 0.6,
     // sensors
     sensorsEnabled: false,
-    sensorMode: 'off', // 'off'|'orientation'|'motion'
-    sensorInf: 0.5,
+    sensorMode: 'off',          // 'off'|'orientation'|'motion'
+    sensorInf: 0.65,            // overall influence
+    motionSens: 1.2,            // acceleration sensitivity
     shakeClears: false,
-    tiltX: 0, tiltY: 0, yaw: 0,
-    accel: 0,
+    sensorDraws: true,          // when true, sensor paints without touch
+    tiltX: 0, tiltY: 0, yaw: 0, // orientation
+    accel: 0,                   // magnitude
+    ax: 0, ay: 0, az: 0,        // filtered accel components
+    rotMag: 0,                  // rotation rate magnitude
+    // sensor painter (virtual brush)
+    sensor: { x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, inited: false },
+    // pointers (manual touch)
+    pointers: new Map(),
     // auto
     auto: false,
     agents: [],
     // perf
     quality: 'balanced',
-    // pointers
-    pointers: new Map(), // pointerId -> {x,y,t, pressure}
   };
 
   // Utils
@@ -356,7 +362,7 @@
   const lerp = (a,b,t)=>a+(b-a)*t;
   const smooth = t => t*t*(3-2*t);
 
-  // Simple deterministic value-noise (3D: x,y,time)
+  // Noise
   function hash3(i,j,k){
     const s = Math.sin(i*127.1 + j*311.7 + k*74.7)*43758.5453123;
     return s - Math.floor(s);
@@ -382,47 +388,41 @@
     return lerp(nxy0, nxy1, w); // 0..1
   }
 
-  // Flow field from turbulence settings
+  // Turbulence flow vector
   function flowVec(x, y, t){
     if (state.turbMode === 'off') return { x: 0, y: 0 };
     const s = state.turbScale;
     const z = t * state.turbSpeed;
 
-    // Sensor tilt gently biases flow
-    let biasX = state.tiltX * state.sensorInf * 0.8;
-    let biasY = -state.tiltY * state.sensorInf * 0.8;
+    // Sensor tilt biases flow slightly
+    let biasX = state.tiltX * state.sensorInf * 0.7;
+    let biasY = -state.tiltY * state.sensorInf * 0.7;
 
     let fx = 0, fy = 0;
     if (state.turbMode === 'noise'){
-      // Two independent noise channels => vector
       fx = (noise3(x*s + 5.2, y*s + 1.7, z) - 0.5) * 2;
       fy = (noise3(x*s - 7.1, y*s - 3.4, z) - 0.5) * 2;
     } else { // curl
-      // Gradient-based curl of scalar noise => nice swirls (divergence-free)
-      const eps = 1.0; // sample offset in "pixel" space pre-scale
+      const eps = 1.0;
       const nx1 = noise3((x+eps)*s, y*s, z);
       const nx2 = noise3((x-eps)*s, y*s, z);
       const ny1 = noise3(x*s, (y+eps)*s, z);
       const ny2 = noise3(x*s, (y-eps)*s, z);
-      const dnx = nx1 - nx2; // ∂n/∂x
-      const dny = ny1 - ny2; // ∂n/∂y
-      fx = dny;      // curl = (∂n/∂y, -∂n/∂x)
-      fy = -dnx;
+      const dnx = nx1 - nx2;
+      const dny = ny1 - ny2;
+      fx = dny; fy = -dnx;
     }
 
-    // Normalize-ish
     const mag = Math.hypot(fx, fy) || 1;
-    fx /= mag; fy /= mag;
+    fx = fx/mag + biasX;
+    fy = fy/mag + biasY;
 
-    // Add sensor bias and mild motion bursts
-    const bump = clamp(state.accel*0.02, 0, 2) * state.sensorInf;
-    fx = fx*(1 + bump) + biasX;
-    fy = fy*(1 + bump) + biasY;
-
-    return { x: fx, y: fy };
+    // motion bursts
+    const bump = clamp(state.accel*0.018, 0, 2) * state.sensorInf;
+    return { x: fx*(1 + bump), y: fy*(1 + bump) };
   }
 
-  // Colors / Palettes
+  // Colors
   function hsla(h,s,l,a=1){ return `hsla(${(h%360+360)%360},${s}%,${l}%,${a})`; }
   function getColor(name, t, x, y){
     const base = state.colorOffset + t;
@@ -458,14 +458,10 @@
 
   // Resize
   function resize(preserve=false){
-    const oldCanvas = preserve ? canvas : null;
     let prevBitmap = null;
-    if (preserve){
-      try {
-        prevBitmap = canvas.transferToImageBitmap ? canvas.transferToImageBitmap() : null;
-      } catch(e){ prevBitmap = null; }
+    if (preserve && canvas.transferToImageBitmap){
+      try { prevBitmap = canvas.transferToImageBitmap(); } catch(_) {}
     }
-
     DPR = Math.min(DPR_MAX, window.devicePixelRatio || 1);
     const w = Math.floor(window.innerWidth);
     const h = Math.floor(window.innerHeight);
@@ -478,8 +474,13 @@
     state.cx = w/2; state.cy = h/2;
     paintBackground(true);
 
+    // reset sensor painter center
+    if (!state.sensor.inited) {
+      state.sensor.x = state.cx; state.sensor.y = state.cy;
+      state.sensor.lastX = state.cx; state.sensor.lastY = state.cy;
+    }
+
     if (preserve && prevBitmap){
-      // scale previous content to new canvas (best-effort)
       ctx.save();
       ctx.globalCompositeOperation = 'source-over';
       ctx.imageSmoothingQuality = 'high';
@@ -510,14 +511,11 @@
     ctx.restore();
   }
 
-  // Pointer input
+  // Pointer input (manual drawing)
   function onDown(e){
     e.preventDefault();
     canvas.setPointerCapture?.(e.pointerId);
-    state.drawing = true;
-    state.pointers.set(e.pointerId, {
-      x: e.clientX, y: e.clientY, t: performance.now(), pressure: e.pressure ?? 0.6
-    });
+    state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now(), pressure: e.pressure ?? 0.6 });
   }
   function onMove(e){
     const prev = state.pointers.get(e.pointerId);
@@ -528,7 +526,6 @@
   }
   function onUp(e){
     state.pointers.delete(e.pointerId);
-    if (state.pointers.size === 0) state.drawing = false;
   }
   canvas.addEventListener('pointerdown', onDown, { passive: false });
   canvas.addEventListener('pointermove', onMove, { passive: false });
@@ -547,7 +544,6 @@
     return { x: state.cx - dx, y };
   }
   function reflectAcrossAxis(p, ang){
-    // reflect point p across a line through center with angle ang
     const dx = p.x - state.cx, dy = p.y - state.cy;
     const ux = Math.cos(ang), uy = Math.sin(ang);
     const dot = dx*ux + dy*uy;
@@ -560,13 +556,11 @@
     const slices = Math.max(1, Math.floor(state.symmetry));
     const angleStep = (Math.PI*2) / slices;
     const rotOff = state.rotOffset;
-
     for (let i=0; i<slices; i++){
       const ang = i * angleStep + rotOff;
       const ra = rotateAround(a.x, a.y, state.cx, state.cy, ang);
       const rb = rotateAround(b.x, b.y, state.cx, state.cy, ang);
       drawOrganicSegment(ra, rb);
-
       if (state.kaleido){
         const ka = reflectAcrossAxis(ra, ang);
         const kb = reflectAcrossAxis(rb, ang);
@@ -580,7 +574,6 @@
     }
   }
 
-  // Drawing segment with turbulence, spray, noise wiggle, sensor dynamics
   function drawOrganicSegment(a, b){
     const dx = b.x - a.x;
     const dy = b.y - a.y;
@@ -588,10 +581,9 @@
     if (dist < 0.5) return;
 
     const tNow = performance.now();
-    // step count: fewer steps for larger brush => perf-friendly
     const stepBase = Math.max(1, state.brushSize * 0.32);
     const steps = Math.max(1, Math.floor(dist / Math.max(1, stepBase)));
-    const nx = -dy / dist, ny = dx / dist; // normal
+    const nx = -dy / dist, ny = dx / dist;
 
     ctx.save();
     ctx.globalCompositeOperation = state.composite;
@@ -605,23 +597,21 @@
       let x = lerp(a.x, b.x, f);
       let y = lerp(a.y, b.y, f);
 
-      // Turbulence warp (flow field)
+      // Turbulence warp
       if (state.turbMode !== 'off' && state.turbInt > 0){
         const fv = flowVec(x, y, tNow*0.001);
-        // scale warp based on brush size & intensity
         const warp = state.turbInt * (0.8 + 0.6*Math.abs(Math.sin((tNow*0.002)+(i*0.3))));
         x += fv.x * warp * (6 + state.brushSize*0.2);
         y += fv.y * warp * (6 + state.brushSize*0.2);
       }
 
-      // Organic wiggle on normal + sensors
+      // Organic wiggle + sensor tilt on normal
       const nval = (noise3(x*0.015, y*0.015, tNow*0.001) - 0.5) * 2;
       const tiltW = (state.tiltX + state.tiltY)*0.5;
       const wiggle = (state.scatter*12 + state.brushSize*0.12) * (nval + tiltW*state.sensorInf*0.6);
       x += nx * wiggle;
       y += ny * wiggle;
 
-      // size & color
       const pressure = state.pointers.size ? [...state.pointers.values()][0]?.pressure || 0.7 : 0.7;
       const accelBoost = (state.accel * 0.04) * state.sensorInf;
       const size = Math.max(1, state.brushSize * (0.6 + 0.4*Math.abs(nval)) * (0.85 + accelBoost) * (0.6 + 0.7*pressure));
@@ -635,7 +625,7 @@
         ctx.beginPath();
         ctx.arc(x, y, size*0.5, 0, Math.PI*2);
         ctx.fill();
-      } else { // spray
+      } else {
         const sprayCount = 3;
         for (let s=0; s<sprayCount; s++){
           const ang = Math.random()*Math.PI*2;
@@ -650,7 +640,7 @@
         }
       }
 
-      // sparkle specks
+      // sparkles
       if (state.scatter > 0.12 && (i % 2 === 0)){
         const sp = (noise3(x*0.03, y*0.03, tNow*0.003) - 0.5) * 2;
         if (Math.abs(sp) > 0.35){
@@ -668,14 +658,13 @@
   }
 
   // Auto agents
-  function makeAgents(n=5){
+  function makeAgents(n=6){
     state.agents = [];
     for (let i=0;i<n;i++){
       state.agents.push({
         x: state.cx + (Math.random()-0.5)*state.width*0.4,
         y: state.cy + (Math.random()-0.5)*state.height*0.4,
         vx: 0, vy: 0,
-        r: state.brushSize * (0.8 + Math.random()*0.6),
       });
     }
   }
@@ -683,25 +672,88 @@
     const t = performance.now();
     const sp = 0.9;
     for (const a of state.agents){
-      // Flow-based steering
       const f = flowVec(a.x, a.y, t*0.001);
-      let fx = f.x * 0.7;
-      let fy = f.y * 0.7;
-
-      a.vx = (a.vx + fx)*0.96;
-      a.vy = (a.vy + fy)*0.96;
-
+      a.vx = (a.vx + f.x * 0.7)*0.96;
+      a.vy = (a.vy + f.y * 0.7)*0.96;
       const old = { x: a.x, y: a.y };
       a.x += a.vx * sp * dt*0.06;
       a.y += a.vy * sp * dt*0.06;
-
-      // wrap
-      if (a.x < -20) a.x = state.width+20;
-      if (a.x > state.width+20) a.x = -20;
-      if (a.y < -20) a.y = state.height+20;
-      if (a.y > state.height+20) a.y = -20;
-
+      wrap(a);
       drawSymmetricSegment(old, {x:a.x, y:a.y, t:t});
+    }
+  }
+
+  // Sensor painter: draws without touch when Sensor mode on
+  function getScreenAngleRad(){
+    const o = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
+    return (o % 360) * Math.PI/180;
+  }
+  function wrap(p){
+    if (p.x < -20) p.x = state.width+20;
+    if (p.x > state.width+20) p.x = -20;
+    if (p.y < -20) p.y = state.height+20;
+    if (p.y > state.height+20) p.y = -20;
+  }
+  function updateSensorPainter(dt){
+    if (!state.sensorsEnabled || state.sensorMode === 'off' || !state.sensorDraws) return;
+    const now = performance.now();
+    const p = state.sensor;
+
+    if (!p.inited){
+      p.x = state.cx; p.y = state.cy;
+      p.lastX = p.x; p.lastY = p.y;
+      p.vx = 0; p.vy = 0;
+      p.inited = true;
+    }
+
+    const dtSec = dt * 0.001;
+    const ang = -getScreenAngleRad(); // rotate device axes to screen coords (roughly)
+
+    if (state.sensorMode === 'orientation'){
+      // tilt steers toward a target
+      const reach = 0.46; // fraction of screen
+      const tx = state.cx + (state.tiltX * state.width * reach);
+      const ty = state.cy + (state.tiltY * state.height * reach);
+      const steer = (0.9 + state.sensorInf*1.6) * (0.016/Math.max(0.008, dtSec));
+      p.vx += (tx - p.x) * steer * dtSec;
+      p.vy += (ty - p.y) * steer * dtSec;
+      // add flow for organic path
+      const f = flowVec(p.x, p.y, now*0.001);
+      p.vx += f.x * state.turbInt * 20 * dtSec;
+      p.vy += f.y * state.turbInt * 20 * dtSec;
+      // friction
+      p.vx *= 0.92; p.vy *= 0.92;
+    } else if (state.sensorMode === 'motion'){
+      // Use acceleration to push the brush; rotate to screen coords
+      // Filtered accel
+      const ax = state.ax, ay = state.ay;
+      const rx = ax * Math.cos(ang) - ay * Math.sin(ang);
+      const ry = ax * Math.sin(ang) + ay * Math.cos(ang);
+      const k = 45 * state.motionSens * (0.5 + state.sensorInf); // push gain
+      p.vx += rx * k * dtSec;
+      p.vy += ry * k * dtSec;
+
+      // add swirl flow + rotation burst
+      const f = flowVec(p.x, p.y, now*0.001);
+      const rotBoost = clamp(state.rotMag/360, 0, 2); // deg/s -> 0..~2
+      p.vx += f.x * state.turbInt * (18 + rotBoost*12) * dtSec;
+      p.vy += f.y * state.turbInt * (18 + rotBoost*12) * dtSec;
+
+      // friction
+      p.vx *= 0.93; p.vy *= 0.93;
+    }
+
+    // Move and wrap
+    const old = { x: p.x, y: p.y, t: now };
+    p.x += p.vx;
+    p.y += p.vy;
+    wrap(p);
+
+    // Draw if moving enough
+    const speed = Math.hypot(p.vx, p.vy);
+    if (speed > 0.05){
+      drawSymmetricSegment({x:p.lastX, y:p.lastY, t: now-dt}, {x:p.x, y:p.y, t: now});
+      p.lastX = p.x; p.lastY = p.y;
     }
   }
 
@@ -728,10 +780,13 @@
       ctx.restore();
     }
 
-    // symmetry rotation from yaw (subtle)
+    // symmetry yaw rotation
     state.rotOffset = state.yaw * 0.15 * state.sensorInf;
 
-    // auto drawing
+    // sensor painter
+    updateSensorPainter(dt);
+
+    // auto agents
     if (state.auto){
       stepAgents(dt);
     }
@@ -768,28 +823,36 @@
     }
   }
   function onOrientation(e){
-    if (state.sensorMode !== 'orientation' && state.sensorMode !== 'motion') return;
-    const beta = e.beta || 0;   // x tilt (-180,180)
-    const gamma = e.gamma || 0; // y tilt (-90,90)
-    const alpha = e.alpha || 0; // yaw
+    if (!state.sensorsEnabled) return;
+    const beta = e.beta ?? 0;   // x tilt (-180,180)
+    const gamma = e.gamma ?? 0; // y tilt (-90,90)
+    const alpha = e.alpha ?? 0; // yaw
     state.tiltX = clamp(gamma/45, -1, 1);
     state.tiltY = clamp(beta/45, -1, 1);
-    state.yaw = alpha/180 - 1; // roughly -1..1
+    state.yaw = (alpha/180 - 1);
   }
-  let lastShakeTime = 0;
+  // simple low-pass filter for acceleration
+  const accLP = { x:0, y:0, z:0 };
   function onMotion(e){
-    if (state.sensorMode !== 'motion') return;
-    const a = e.accelerationIncludingGravity || e.acceleration || { x:0, y:0, z:0 };
-    const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
+    if (!state.sensorsEnabled) return;
+    const a = e.acceleration ?? e.accelerationIncludingGravity ?? {x:0,y:0,z:0};
+    const r = e.rotationRate || { alpha:0, beta:0, gamma:0 };
+    // low-pass to tame noise
+    const alphaLP = 0.7;
+    accLP.x = alphaLP*accLP.x + (1-alphaLP)*(a.x || 0);
+    accLP.y = alphaLP*accLP.y + (1-alphaLP)*(a.y || 0);
+    accLP.z = alphaLP*accLP.z + (1-alphaLP)*(a.z || 0);
+    state.ax = accLP.x;
+    state.ay = accLP.y;
+    state.az = accLP.z;
+
+    // magnitude (including gravity is fine as an activity signal)
+    const ai = e.accelerationIncludingGravity || {x:0,y:0,z:0};
+    const mag = Math.sqrt((ai.x||0)**2 + (ai.y||0)**2 + (ai.z||0)**2);
     state.accel = mag;
-    if (state.shakeClears && mag > 22){
-      const t = performance.now();
-      if (t - lastShakeTime > 800){
-        lastShakeTime = t;
-        clearCanvas();
-        navigator.vibrate?.(50);
-      }
-    }
+
+    const rotM = Math.sqrt((r.alpha||0)**2 + (r.beta||0)**2 + (r.gamma||0)**2);
+    state.rotMag = rotM;
   }
 
   // Controls/UI
@@ -828,7 +891,11 @@
   const sensorMode = document.getElementById('sensorMode');
   const sensorInf = document.getElementById('sensorInf');
   const sensorInfVal = document.getElementById('sensorInfVal');
+  const motionSens = document.getElementById('motionSens');
+  const motionSensVal = document.getElementById('motionSensVal');
   const shakeClear = document.getElementById('shakeClear');
+  const sensorTrail = document.getElementById('sensorTrail');
+
   const bgMode = document.getElementById('bgMode');
   const composite = document.getElementById('composite');
   const randomize = document.getElementById('randomize');
@@ -855,8 +922,7 @@
     }
   });
 
-  clearBtn.addEventListener('click', clearCanvas);
-  function clearCanvas(){ paintBackground(true); }
+  clearBtn.addEventListener('click', () => paintBackground(true));
 
   autoBtn.addEventListener('click', () => {
     state.auto = !state.auto;
@@ -885,7 +951,7 @@
   brushSoft.addEventListener('click', ()=>setBrush('soft'));
   brushSpray.addEventListener('click', ()=>setBrush('spray'));
 
-  // Controls wiring
+  // Wiring
   paletteEl.addEventListener('change', e => state.palette = e.target.value);
   colorSpeed.addEventListener('input', e => { state.colorSpeed = +e.target.value; colorSpeedVal.textContent = state.colorSpeed.toFixed(2); });
   size.addEventListener('input', e => { state.brushSize = +e.target.value; sizeVal.textContent = state.brushSize|0; });
@@ -903,15 +969,18 @@
 
   sensorMode.addEventListener('change', e => {
     state.sensorMode = e.target.value;
+    state.sensor.inited = false; // re-center painter on mode change
     if (state.sensorMode !== 'off' && !state.sensorsEnabled) enableSensors();
   });
-  sensorInf.addEventListener('input', e => {
-    state.sensorInf = +e.target.value;
-    sensorInfVal.textContent = state.sensorInf.toFixed(2);
-  });
+  sensorInf.addEventListener('input', e => { state.sensorInf = +e.target.value; sensorInfVal.textContent = state.sensorInf.toFixed(2); });
+  motionSens.addEventListener('input', e => { state.motionSens = +e.target.value; motionSensVal.textContent = state.motionSens.toFixed(2); });
   shakeClear.addEventListener('click', () => {
     state.shakeClears = !state.shakeClears;
     shakeClear.classList.toggle('active', state.shakeClears);
+  });
+  sensorTrail.addEventListener('click', () => {
+    state.sensorDraws = !state.sensorDraws;
+    sensorTrail.classList.toggle('active', state.sensorDraws);
   });
 
   bgMode.addEventListener('change', e => { state.bgMode = e.target.value; paintBackground(true); });
@@ -951,7 +1020,7 @@
       state.glow = Math.min(state.glow, 18);
       glow.value = state.glow; glowVal.textContent = state.glow|0;
     } else if (state.quality === 'high') {
-      DPR_MAX = 2.5; // cap for mobile sanity
+      DPR_MAX = 2.5;
     } else {
       DPR_MAX = 2;
     }
@@ -976,17 +1045,19 @@
     turbScaleVal.textContent = state.turbScale.toFixed(3);
     turbSpeedVal.textContent = state.turbSpeed.toFixed(2);
     sensorInfVal.textContent = state.sensorInf.toFixed(2);
+    motionSensVal.textContent = state.motionSens.toFixed(2);
   }
 
-  // Hide hint after first touch
+  // Hint fade on first interaction (touch or enabling sensors)
   let hinted = false;
-  canvas.addEventListener('pointerdown', ()=>{
-    if (!hinted){
-      hinted = true;
-      hint.style.opacity = '0';
-      setTimeout(()=> hint.style.display='none', 400);
-    }
-  }, { passive: true });
+  function hideHint(){
+    if (hinted) return;
+    hinted = true;
+    hint.style.opacity = '0';
+    setTimeout(()=> hint.style.display='none', 400);
+  }
+  canvas.addEventListener('pointerdown', hideHint, { passive: true });
+  sensorBtn.addEventListener('click', hideHint);
 
   // Kickoff
   resize();
