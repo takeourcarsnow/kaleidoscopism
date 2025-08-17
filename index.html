@@ -1,14 +1,9 @@
-Love the direction. I reworked sensors with a big focus on Motion drawing, added multiple sensor modes, stabilized tilt (no more feedback loop), fixed the random long lines by gating teleport segments, and added more controls (deadzone, friction, min-draw speed, filter strength, bounds, linear-acc toggle, calibrate, center). Motion modes now paint without touch as requested.
-
-Copy this whole file into an .html and open on your phone.
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>Psychedelic Sketch — Sensor Lab</title>
+<title>Psychedelic Sketch — Solid Stroke Edition</title>
 <style>
   :root {
     --bg: #050508;
@@ -32,152 +27,63 @@ Copy this whole file into an .html and open on your phone.
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
-  #app {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-  }
+  #app { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr auto; }
   canvas {
-    position: absolute;
-    inset: 0;
-    width: 100vw;
-    height: 100vh;
-    touch-action: none;
-    display: block;
+    position: absolute; inset: 0; width: 100vw; height: 100vh; touch-action: none; display: block;
     background:
       radial-gradient(1200px 800px at 45% 40%, rgba(50,10,60,0.18), transparent 60%),
       radial-gradient(900px 600px at 65% 60%, rgba(10,60,60,0.14), transparent 60%),
       var(--bg);
   }
-  /* Top bar */
   .topbar {
-    position: fixed;
-    top: env(safe-area-inset-top, 8px);
-    left: 0; right: 0;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 10px;
-    pointer-events: none;
-    z-index: 10;
+    position: fixed; top: env(safe-area-inset-top, 8px); left: 0; right: 0;
+    display: flex; align-items: center; justify-content: space-between; padding: 8px 10px;
+    pointer-events: none; z-index: 10;
   }
   .btn {
-    pointer-events: all;
-    display: inline-flex; align-items: center; justify-content: center;
-    gap: 8px;
-    background: var(--btn);
-    color: var(--text);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    padding: 10px 12px;
-    font-size: 14px; line-height: 1;
-    box-shadow: var(--shadow);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    user-select: none;
+    pointer-events: all; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--btn); color: var(--text); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 10px 12px; font-size: 14px; line-height: 1; box-shadow: var(--shadow);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); user-select: none;
   }
   .btn:active { transform: translateY(1px); }
   .btn.active { outline: 2px solid var(--accent); }
   .icon { font-size: 18px; }
   .chip {
-    pointer-events: all;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.08);
-    color: var(--muted);
-    border-radius: 999px;
-    padding: 8px 12px;
-    font-size: 12px;
-    box-shadow: var(--shadow);
-    backdrop-filter: blur(6px);
+    pointer-events: all; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+    color: var(--muted); border-radius: 999px; padding: 8px 12px; font-size: 12px; box-shadow: var(--shadow); backdrop-filter: blur(6px);
   }
-  /* Settings panel */
   #panel {
-    position: fixed;
-    left: 10px; right: 10px;
-    top: calc(env(safe-area-inset-top, 8px) + 54px);
-    max-width: 1100px;
-    margin: 0 auto;
-    background: var(--panel);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 16px;
-    padding: 12px;
-    box-shadow: var(--shadow);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    transform-origin: top center;
-    transition: transform 200ms ease, opacity 200ms ease;
-    z-index: 11;
+    position: fixed; left: 10px; right: 10px; top: calc(env(safe-area-inset-top, 8px) + 54px);
+    max-width: 1200px; margin: 0 auto; background: var(--panel); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px; padding: 12px; box-shadow: var(--shadow); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    transform-origin: top center; transition: transform 200ms ease, opacity 200ms ease; z-index: 11;
   }
   #panel.hidden { transform: scale(0.98); opacity: 0; pointer-events: none; }
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  @media (min-width: 720px) {
-    .grid { grid-template-columns: repeat(3, 1fr); }
-  }
-  @media (min-width: 1080px) {
-    .grid { grid-template-columns: repeat(4, 1fr); }
-  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (min-width: 720px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 1120px) { .grid { grid-template-columns: repeat(4, 1fr); } }
   .control {
-    display: grid;
-    gap: 6px;
-    background: rgba(255,255,255,0.04);
-    padding: 8px;
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.08);
+    display: grid; gap: 6px; background: rgba(255,255,255,0.04);
+    padding: 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
   }
-  .control label {
-    display: flex; align-items: center; justify-content: space-between;
-    font-size: 12px; color: var(--muted);
-  }
-  .control input[type="range"],
-  .control select {
-    width: 100%;
-    accent-color: var(--accent);
-  }
-  .row {
-    display: flex; gap: 8px; flex-wrap: wrap;
-  }
-  .pill {
-    flex: 1 1 auto; text-align: center;
-  }
+  .control label { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .control input[type="range"], .control select { width: 100%; accent-color: var(--accent); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { flex: 1 1 auto; text-align: center; }
   .pill.active { outline: 2px solid var(--accent); }
-  /* Bottom bar */
   .bottombar {
-    position: fixed;
-    bottom: calc(env(safe-area-inset-bottom, 8px) + 8px);
-    left: 0; right: 0;
-    display: flex; gap: 10px; justify-content: center;
-    z-index: 10;
+    position: fixed; bottom: calc(env(safe-area-inset-bottom, 8px) + 8px); left: 0; right: 0; display: flex; gap: 10px; justify-content: center; z-index: 10;
   }
   .fab {
-    pointer-events: all;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    color: #020206;
-    border: none;
-    border-radius: 14px;
-    padding: 12px 16px;
-    font-weight: 700;
-    box-shadow: 0 10px 30px rgba(139,247,255,0.35), 0 10px 30px rgba(255,139,247,0.25);
-    user-select: none;
+    pointer-events: all; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #020206; border: none; border-radius: 14px;
+    padding: 12px 16px; font-weight: 700; box-shadow: 0 10px 30px rgba(139,247,255,0.35), 0 10px 30px rgba(255,139,247,0.25); user-select: none;
   }
-  .fab.secondary {
-    background: var(--btn);
-    color: var(--text);
-    border: 1px solid rgba(255,255,255,0.08);
-    box-shadow: var(--shadow);
-  }
+  .fab.secondary { background: var(--btn); color: var(--text); border: 1px solid rgba(255,255,255,0.08); box-shadow: var(--shadow); }
   .legend {
-    position: fixed;
-    left: 50%; transform: translateX(-50%);
-    bottom: calc(env(safe-area-inset-bottom, 8px) + 60px);
-    font-size: 12px; color: var(--muted);
-    text-align: center; padding: 6px 10px;
-    background: rgba(0,0,0,0.35);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px; backdrop-filter: blur(8px);
-    z-index: 9;
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 8px) + 60px);
+    font-size: 12px; color: var(--muted); text-align: center; padding: 6px 10px; background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; backdrop-filter: blur(8px); z-index: 9;
   }
 </style>
 </head>
@@ -187,7 +93,7 @@ Copy this whole file into an .html and open on your phone.
 
   <div class="topbar">
     <button id="menuBtn" class="btn" aria-label="Settings"><span class="icon">⚙️</span> Settings</button>
-    <div class="chip" id="hint">enable Sensors → Motion modes to draw by moving the phone</div>
+    <div class="chip" id="hint">Sensors → Motion to draw by moving • Brush: Stroke for solid lines</div>
     <div style="display:flex; gap:8px;">
       <button id="sensorBtn" class="btn" aria-label="Enable sensors"><span class="icon">📳</span> Sensors</button>
       <button id="saveBtn" class="btn" aria-label="Save"><span class="icon">📸</span></button>
@@ -206,19 +112,80 @@ Copy this whole file into an .html and open on your phone.
             <option>Acid</option>
           </select>
         </label>
+        <label>Color mode
+          <select id="colorMode">
+            <option value="palette" selected>Palette</option>
+            <option value="velocity">Velocity</option>
+            <option value="accel">Acceleration</option>
+            <option value="spin">Spin (gyro)</option>
+            <option value="direction">Direction</option>
+            <option value="heat">Heat</option>
+          </select>
+        </label>
+        <label id="metricRangeLabel">Metric range <span id="metricRangeVal"></span></label>
+        <input type="range" id="metricRange" min="1" max="600" step="1" value="180" />
+        <div id="heatControls">
+          <label>Heat gain <span id="heatGainVal"></span></label>
+          <input type="range" id="heatGain" min="0" max="2" step="0.02" value="0.6" />
+          <label>Heat decay <span id="heatDecayVal"></span></label>
+          <input type="range" id="heatDecay" min="0" max="1" step="0.01" value="0.14" />
+        </div>
         <label>Color speed <span id="colorSpeedVal"></span></label>
         <input type="range" id="colorSpeed" min="0" max="1.2" step="0.01" value="0.48" />
+        <div class="row">
+          <button id="lockColor" class="btn pill">Lock color per segment</button>
+        </div>
       </div>
 
       <div class="control">
-        <label>Brush size <span id="sizeVal"></span></label>
-        <input type="range" id="size" min="1" max="100" step="1" value="30" />
-        <label>Glow <span id="glowVal"></span></label>
-        <input type="range" id="glow" min="0" max="70" step="1" value="26" />
-        <div class="row">
-          <button id="brushSoft" class="btn pill active">Soft</button>
-          <button id="brushSpray" class="btn pill">Spray</button>
+        <label>Brush type
+          <select id="brushType">
+            <option value="stroke" selected>Stroke (solid)</option>
+            <option value="dots">Dots</option>
+            <option value="spray">Spray</option>
+          </select>
+        </label>
+
+        <div id="strokeBlock">
+          <label>Width mode
+            <select id="widthMode">
+              <option value="constant" selected>Constant</option>
+              <option value="speed">Speed-based</option>
+            </select>
+          </label>
+          <label>Min width <span id="widthMinVal"></span></label>
+          <input type="range" id="widthMin" min="1" max="40" step="1" value="2" />
+          <label>Max width <span id="widthMaxVal"></span></label>
+          <input type="range" id="widthMax" min="2" max="80" step="1" value="18" />
+          <label id="widthRangeLabel">Width range (px/s) <span id="widthRangeVal"></span></label>
+          <input type="range" id="widthRange" min="100" max="3000" step="10" value="1200" />
+          <label>Stroke opacity <span id="strokeAlphaVal"></span></label>
+          <input type="range" id="strokeAlpha" min="0.2" max="1" step="0.01" value="0.95" />
+          <label>Stroke detail <span id="strokeDetailVal"></span></label>
+          <input type="range" id="strokeDetail" min="0.5" max="3" step="0.05" value="1.4" />
+          <label>Line cap
+            <select id="lineCap">
+              <option value="round" selected>Round</option>
+              <option value="butt">Butt</option>
+              <option value="square">Square</option>
+            </select>
+          </label>
+          <label>Line join
+            <select id="lineJoin">
+              <option value="round" selected>Round</option>
+              <option value="bevel">Bevel</option>
+              <option value="miter">Miter</option>
+            </select>
+          </label>
         </div>
+
+        <div id="dotsBlock" style="display:none;">
+          <label>Dot size (Brush size) <span id="sizeVal"></span></label>
+          <input type="range" id="size" min="1" max="100" step="1" value="30" />
+        </div>
+
+        <label>Glow (off by default) <span id="glowVal"></span></label>
+        <input type="range" id="glow" min="0" max="70" step="1" value="0" />
       </div>
 
       <div class="control">
@@ -280,11 +247,13 @@ Copy this whole file into an .html and open on your phone.
         <input type="range" id="filter" min="0" max="0.95" step="0.01" value="0.7" />
         <label>Bounds
           <select id="boundsMode">
-            <option value="wrap" selected>Wrap</option>
-            <option value="bounce">Bounce</option>
+            <option value="wrap">Wrap</option>
+            <option value="bounce" selected>Bounce</option>
             <option value="clamp">Clamp</option>
           </select>
         </label>
+        <label>Edge padding <span id="edgePadVal"></span></label>
+        <input type="range" id="edgePad" min="0" max="40" step="1" value="0" />
         <div class="row">
           <button id="useLinear" class="btn pill active">Linear Accel</button>
           <button id="shakeClear" class="btn pill">Shake clears</button>
@@ -325,7 +294,7 @@ Copy this whole file into an .html and open on your phone.
     </div>
   </div>
 
-  <div class="legend" id="legend">Motion modes paint without touch • tweak sensitivity, deadzone, friction • calibrate if tilt feels off</div>
+  <div class="legend" id="legend">Solid strokes by default • Switch to Dots/Spray if you want particles • Motion modes paint hands-free</div>
 
   <div class="bottombar">
     <button id="clearBtn" class="fab secondary">Clear</button>
@@ -337,7 +306,7 @@ Copy this whole file into an .html and open on your phone.
 (function(){
   'use strict';
 
-  // Canvas + DPR setup
+  // Canvas + DPR
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d', { alpha: true });
   let DPR_MAX = 2;
@@ -346,17 +315,37 @@ Copy this whole file into an .html and open on your phone.
   const state = {
     width: 0, height: 0, cx: 0, cy: 0,
 
-    // drawing
-    brush: 'soft', // 'soft'|'spray'
-    brushSize: 30,
-    glow: 26,
+    // brush/stroke
+    brush: 'stroke', // 'stroke'|'dots'|'spray'
+    brushSize: 30,   // for dots/spray
+    glow: 0,         // default off
+    stroke: {
+      widthMode: 'constant', // 'constant'|'speed'
+      widthMin: 2,
+      widthMax: 18,
+      widthRange: 1200, // px/s where width -> min
+      alpha: 0.95,
+      detail: 1.4, // >1 = more points per segment (smoother)
+      cap: 'round',
+      join: 'round',
+      lockColor: false,
+    },
+
+    // symmetry
     symmetry: 10,
     kaleido: true,
     mirror: false,
     rotOffset: 0,
+
+    // color
     palette: 'Rainbow',
+    colorMode: 'palette', // 'palette'|'velocity'|'accel'|'spin'|'direction'|'heat'
+    metricRange: 180,     // range for velocity/accel/spin
     colorSpeed: 0.48,
     colorOffset: Math.random()*360,
+    heat: 0, heatGain: 0.6, heatDecay: 0.14, sensorSpeed: 0,
+
+    // visuals
     scatter: 0.2,
     fade: 0.035,
     composite: 'lighter',
@@ -370,27 +359,27 @@ Copy this whole file into an .html and open on your phone.
 
     // sensors
     sensorsEnabled: false,
-    sensorMode: 'off',                 // 'off'|'tilt'|'motion'|'motion-swirl'|'gyro-orbit'
+    sensorMode: 'off', // 'off'|'tilt'|'motion'|'motion-swirl'|'gyro-orbit'
     sensorInf: 0.7,
     motionSens: 1.2,
     friction: 0.93,
     deadzone: 0.06,
     minDrawSpeed: 0.08,
-    filterStrength: 0.7,               // 0..0.95 low-pass factor
-    boundsMode: 'wrap',                 // 'wrap'|'bounce'|'clamp'
+    filterStrength: 0.7,
+    boundsMode: 'bounce',
+    edgePad: 0,
     useLinear: true,
     shakeClears: false,
     sensorDraws: true,
 
-    // orientation + accel
     tiltX: 0, tiltY: 0, yaw: 0, yawBias: 0,
     accelMag: 0,
-    ax: 0, ay: 0, az: 0,               // linear accel (filtered)
-    gx: 0, gy: 0, gz: 0,               // gravity estimate (LPF)
-    rot: { alpha: 0, beta: 0, gamma: 0 }, // deg/s
+    ax: 0, ay: 0, az: 0,
+    gx: 0, gy: 0, gz: 0,
+    rot: { alpha: 0, beta: 0, gamma: 0 },
     rotMag: 0,
 
-    // sensor painter (virtual brush)
+    // sensor painter
     sensor: { x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, inited: false },
 
     // input pointers
@@ -408,70 +397,50 @@ Copy this whole file into an .html and open on your phone.
   const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
   const lerp = (a,b,t)=>a+(b-a)*t;
   const smooth = t => t*t*(3-2*t);
+  const map01 = (x,a,b)=>clamp((x-a)/(b-a),0,1);
 
-  // Noise (3D value noise for wiggle/flow)
-  function hash3(i,j,k){
-    const s = Math.sin(i*127.1 + j*311.7 + k*74.7)*43758.5453123;
-    return s - Math.floor(s);
-  }
+  // Noise (3D)
+  function hash3(i,j,k){ const s = Math.sin(i*127.1 + j*311.7 + k*74.7)*43758.5453123; return s - Math.floor(s); }
   function noise3(x,y,z){
     const i = Math.floor(x), j = Math.floor(y), k = Math.floor(z);
     const fx = x - i, fy = y - j, fz = z - k;
     const u = smooth(fx), v = smooth(fy), w = smooth(fz);
-    const n000 = hash3(i, j, k);
-    const n100 = hash3(i+1, j, k);
-    const n010 = hash3(i, j+1, k);
-    const n110 = hash3(i+1, j+1, k);
-    const n001 = hash3(i, j, k+1);
-    const n101 = hash3(i+1, j, k+1);
-    const n011 = hash3(i, j+1, k+1);
-    const n111 = hash3(i+1, j+1, k+1);
-    const nx00 = lerp(n000, n100, u);
-    const nx10 = lerp(n010, n110, u);
-    const nx01 = lerp(n001, n101, u);
-    const nx11 = lerp(n011, n111, u);
-    const nxy0 = lerp(nx00, nx10, v);
-    const nxy1 = lerp(nx01, nx11, v);
+    const n000 = hash3(i, j, k), n100 = hash3(i+1, j, k), n010 = hash3(i, j+1, k), n110 = hash3(i+1, j+1, k);
+    const n001 = hash3(i, j, k+1), n101 = hash3(i+1, j, k+1), n011 = hash3(i, j+1, k+1), n111 = hash3(i+1, j+1, k+1);
+    const nx00 = lerp(n000, n100, u), nx10 = lerp(n010, n110, u), nx01 = lerp(n001, n101, u), nx11 = lerp(n011, n111, u);
+    const nxy0 = lerp(nx00, nx10, v), nxy1 = lerp(nx01, nx11, v);
     return lerp(nxy0, nxy1, w);
   }
 
-  // Turbulence flow vector (noise/curl)
+  // Flow field
   function flowVec(x, y, t){
     if (state.turbMode === 'off') return { x: 0, y: 0 };
     const s = state.turbScale;
     const z = t * state.turbSpeed;
-
-    // tilt bias for subtle control
     const biasX = state.tiltX * state.sensorInf * 0.6;
     const biasY = -state.tiltY * state.sensorInf * 0.6;
 
     let fx = 0, fy = 0;
     if (state.turbMode === 'noise'){
-      fx = (noise3(x*s + 5.2, y*s + 1.7, z) - 0.5) * 2;
-      fy = (noise3(x*s - 7.1, y*s - 3.4, z) - 0.5) * 2;
-    } else { // curl
+      fx = (noise3(x*s + 5.2, y*s + 1.7, z) - 0.5)*2;
+      fy = (noise3(x*s - 7.1, y*s - 3.4, z) - 0.5)*2;
+    } else {
       const eps = 1.0;
-      const nx1 = noise3((x+eps)*s, y*s, z);
-      const nx2 = noise3((x-eps)*s, y*s, z);
-      const ny1 = noise3(x*s, (y+eps)*s, z);
-      const ny2 = noise3(x*s, (y-eps)*s, z);
-      const dnx = nx1 - nx2;
-      const dny = ny1 - ny2;
+      const nx1 = noise3((x+eps)*s, y*s, z), nx2 = noise3((x-eps)*s, y*s, z);
+      const ny1 = noise3(x*s, (y+eps)*s, z), ny2 = noise3(x*s, (y-eps)*s, z);
+      const dnx = nx1 - nx2, dny = ny1 - ny2;
       fx = dny; fy = -dnx;
     }
-
     const mag = Math.hypot(fx, fy) || 1;
     fx = fx/mag + biasX;
     fy = fy/mag + biasY;
-
-    // motion burst
     const bump = clamp(state.accelMag*0.015, 0, 2) * state.sensorInf;
     return { x: fx*(1 + bump), y: fy*(1 + bump) };
   }
 
-  // Colors / Palettes
+  // Palettes
   function hsla(h,s,l,a=1){ return `hsla(${(h%360+360)%360},${s}%,${l}%,${a})`; }
-  function getColor(name, t, x, y){
+  function getPaletteColor(name, t, x, y){
     const base = state.colorOffset + t;
     switch(name){
       case 'Neon':   return hsla(base + (x - state.cx)*0.05, 100, 60 + 10*Math.sin((y + t)*0.01));
@@ -480,6 +449,50 @@ Copy this whole file into an .html and open on your phone.
       case 'Acid':   return hsla(base*1.1 + 180*Math.sin((x*0.02)+(t*0.003)), 100, 60);
       default:       return hsla(base + 0.06*(x - state.cx) + 0.04*(y - state.cy), 100, 58);
     }
+  }
+
+  // Color modes
+  function hueFromVal(val){ return 220 - 220*val; } // 1->red, 0->blue
+  function colorFromVal(val, scheme='hue'){
+    val = clamp(val, 0, 1);
+    if (scheme === 'fire'){
+      const h = lerp(280, 50, val);
+      const l = lerp(40, 65, Math.pow(val, 0.7));
+      return hsla(h, 100, l);
+    }
+    if (scheme === 'ice'){
+      const h = lerp(180, 200, val);
+      const l = lerp(45, 80, val*0.8);
+      return hsla(h, 90, l);
+    }
+    return hsla(hueFromVal(val), 100, 58);
+  }
+  function getStrokeColor(x, y, segSpeed, segDir, tNow, stepIndex, dist){
+    const baseT = state.colorOffset + dist*state.colorSpeed*0.3 + stepIndex*state.colorSpeed*1.1;
+    if (state.colorMode === 'palette'){
+      return getPaletteColor(state.palette, baseT + (state.yaw - state.yawBias)*15*state.sensorInf, x, y);
+    }
+    if (state.colorMode === 'velocity'){
+      const val = map01(segSpeed*1000, 0, state.metricRange); // px/s
+      return colorFromVal(val, 'hue');
+    }
+    if (state.colorMode === 'accel'){
+      const val = map01(state.accelMag, 0, state.metricRange); // m/s^2
+      return colorFromVal(val, 'ice');
+    }
+    if (state.colorMode === 'spin'){
+      const val = map01(state.rotMag, 0, state.metricRange); // deg/s
+      return colorFromVal(val, 'hue');
+    }
+    if (state.colorMode === 'direction'){
+      const dirDeg = (segDir*180/Math.PI + 360) % 360;
+      return hsla(dirDeg, 100, 58);
+    }
+    if (state.colorMode === 'heat'){
+      const val = clamp(state.heat, 0, 1);
+      return colorFromVal(val, 'fire');
+    }
+    return getPaletteColor(state.palette, baseT, x, y);
   }
 
   // Resize
@@ -500,19 +513,15 @@ Copy this whole file into an .html and open on your phone.
     state.cx = w/2; state.cy = h/2;
     paintBackground(true);
 
-    // re-center sensor painter if not inited
     if (!state.sensor.inited) {
       state.sensor.x = state.cx; state.sensor.y = state.cy;
       state.sensor.lastX = state.cx; state.sensor.lastY = state.cy;
     }
-
     if (preserve && prevBitmap){
-      ctx.save();
-      ctx.globalCompositeOperation = 'source-over';
+      ctx.save(); ctx.globalCompositeOperation = 'source-over';
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(prevBitmap, 0, 0, w, h);
-      ctx.restore();
-      prevBitmap.close?.();
+      ctx.restore(); prevBitmap.close?.();
     }
   }
   window.addEventListener('resize', () => resize(true), { passive: true });
@@ -522,22 +531,18 @@ Copy this whole file into an .html and open on your phone.
     ctx.setTransform(DPR,0,0,DPR,0,0);
     if (hard) ctx.clearRect(0,0,state.width,state.height);
     if (state.bgMode === 'light'){
-      ctx.fillStyle = 'rgba(250,252,255,1)';
-      ctx.fillRect(0,0,state.width,state.height);
+      ctx.fillStyle = 'rgba(250,252,255,1)'; ctx.fillRect(0,0,state.width,state.height);
     } else if (state.bgMode === 'deep'){
       const g = ctx.createRadialGradient(state.cx, state.cy, Math.min(state.width,state.height)*0.1, state.cx, state.cy, Math.max(state.width,state.height));
-      g.addColorStop(0, 'rgba(10,10,20,1)');
-      g.addColorStop(1, 'rgba(0,0,0,1)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0,0,state.width,state.height);
+      g.addColorStop(0, 'rgba(10,10,20,1)'); g.addColorStop(1, 'rgba(0,0,0,1)');
+      ctx.fillStyle = g; ctx.fillRect(0,0,state.width,state.height);
     } else {
-      ctx.fillStyle = 'rgba(5,5,8,1)';
-      ctx.fillRect(0,0,state.width,state.height);
+      ctx.fillStyle = 'rgba(5,5,8,1)'; ctx.fillRect(0,0,state.width,state.height);
     }
     ctx.restore();
   }
 
-  // Pointer input (manual drawing)
+  // Pointer input
   function onDown(e){
     e.preventDefault();
     canvas.setPointerCapture?.(e.pointerId);
@@ -550,9 +555,7 @@ Copy this whole file into an .html and open on your phone.
     safeSymmetricSegment(prev, now);
     state.pointers.set(e.pointerId, now);
   }
-  function onUp(e){
-    state.pointers.delete(e.pointerId);
-  }
+  function onUp(e){ state.pointers.delete(e.pointerId); }
   canvas.addEventListener('pointerdown', onDown, { passive: false });
   canvas.addEventListener('pointermove', onMove, { passive: false });
   canvas.addEventListener('pointerup', onUp, { passive: false });
@@ -562,74 +565,148 @@ Copy this whole file into an .html and open on your phone.
   // Symmetry helpers
   function rotateAround(x,y, cx,cy, ang){
     const dx = x - cx, dy = y - cy;
-    const cos = Math.cos(ang), sin = Math.sin(ang);
-    return { x: cx + dx*cos - dy*sin, y: cy + dx*sin + dy*cos };
+    const c = Math.cos(ang), s = Math.sin(ang);
+    return { x: cx + dx*c - dy*s, y: cy + dx*s + dy*c };
   }
-  function mirrorAcrossCenter(x,y){
-    const dx = x - state.cx;
-    return { x: state.cx - dx, y };
-  }
+  function mirrorAcrossCenter(x,y){ const dx = x - state.cx; return { x: state.cx - dx, y }; }
   function reflectAcrossAxis(p, ang){
     const dx = p.x - state.cx, dy = p.y - state.cy;
     const ux = Math.cos(ang), uy = Math.sin(ang);
     const dot = dx*ux + dy*uy;
-    const rx = 2*dot*ux - dx;
-    const ry = 2*dot*uy - dy;
+    const rx = 2*dot*ux - dx, ry = 2*dot*uy - dy;
     return { x: state.cx + rx, y: state.cy + ry };
   }
 
-  // Teleport/long-segment guard to prevent random long lines
+  // Teleport guard
   function safeSymmetricSegment(a, b){
     const dt = Math.abs((b.t||0) - (a.t||0)) || 0;
     const dist = Math.hypot((b.x-a.x), (b.y-a.y));
     const MAX_SEG = Math.min(state.width, state.height) * 0.35;
-    if (dt > 180 || dist > MAX_SEG){
-      // treat as teleport; update last but don't draw
-      return;
-    }
-    drawSymmetricSegment(a, b);
+    if (dt > 180 || dist > MAX_SEG) return; // skip
+    drawSymmetricSegment(a, b, dt, dist);
   }
 
-  function drawSymmetricSegment(a, b){
+  function drawSymmetricSegment(a, b, dt=16, dist=null){
     const slices = Math.max(1, Math.floor(state.symmetry));
-    const angleStep = (Math.PI*2) / slices;
+    const step = (Math.PI*2) / slices;
     const rotOff = state.rotOffset;
 
     for (let i=0; i<slices; i++){
-      const ang = i * angleStep + rotOff;
+      const ang = i*step + rotOff;
       const ra = rotateAround(a.x, a.y, state.cx, state.cy, ang);
       const rb = rotateAround(b.x, b.y, state.cx, state.cy, ang);
-      drawOrganicSegment(ra, rb);
+
+      drawByBrush(ra, rb, dt, dist);
 
       if (state.kaleido){
-        const ka = reflectAcrossAxis(ra, ang);
-        const kb = reflectAcrossAxis(rb, ang);
-        drawOrganicSegment(ka, kb);
+        const ka = reflectAcrossAxis(ra, ang), kb = reflectAcrossAxis(rb, ang);
+        drawByBrush(ka, kb, dt, dist);
       }
       if (state.mirror){
-        const ma = mirrorAcrossCenter(ra.x, ra.y);
-        const mb = mirrorAcrossCenter(rb.x, rb.y);
-        drawOrganicSegment(ma, mb);
+        const ma = mirrorAcrossCenter(ra.x, ra.y), mb = mirrorAcrossCenter(rb.x, rb.y);
+        drawByBrush(ma, mb, dt, dist);
       }
     }
   }
 
-  function drawOrganicSegment(a, b){
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const dist = Math.hypot(dx, dy);
+  function drawByBrush(a, b, dt=16, dist=null){
+    if (state.brush === 'stroke') drawStrokeSegment(a, b, dt, dist);
+    else drawDottySegment(a, b, dt, dist, state.brush); // 'dots' or 'spray'
+  }
+
+  // Solid stroke segment (polyline with turbulence warp)
+  function drawStrokeSegment(a, b, dt=16, preDist=null){
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = preDist ?? Math.hypot(dx, dy);
+    if (dist < 0.2) return;
+
+    const tNow = performance.now();
+    const dtms = Math.max(1, dt);
+    const segSpeed = dist / dtms; // px/ms
+    const segDir = Math.atan2(dy, dx);
+
+    // stroke width
+    let w = state.stroke.widthMax;
+    if (state.stroke.widthMode === 'speed'){
+      const speed_ps = segSpeed * 1000;
+      const t = clamp(1 - speed_ps / state.stroke.widthRange, 0, 1);
+      w = state.stroke.widthMin + (state.stroke.widthMax - state.stroke.widthMin) * t;
+    }
+    w = clamp(w, 1, 200);
+
+    // configure context once
+    ctx.save();
+    ctx.globalCompositeOperation = state.composite;
+    ctx.lineCap = state.stroke.cap;
+    ctx.lineJoin = state.stroke.join;
+    ctx.miterLimit = 8;
+    ctx.lineWidth = w;
+    ctx.globalAlpha = state.stroke.alpha;
+    ctx.shadowBlur = state.glow || 0;
+
+    // segment subdivision for warping
+    const baseStep = 6 / state.stroke.detail; // base pixels between samples
+    const steps = Math.max(1, Math.ceil(dist / Math.max(1, baseStep)));
+    let x0 = a.x, y0 = a.y;
+
+    // precompute start color if locking
+    let lockedColor = null;
+    if (state.stroke.lockColor){
+      lockedColor = getStrokeColor(a.x, a.y, segSpeed, segDir, tNow, 0, dist);
+    }
+
+    // walk points and draw mini-segments to keep color dynamic if desired
+    for (let i=1; i<=steps; i++){
+      const f = i/steps;
+      let x = lerp(a.x, b.x, f);
+      let y = lerp(a.y, b.y, f);
+
+      // turbulence warp along the path
+      if (state.turbMode !== 'off' && state.turbInt > 0){
+        const fv = flowVec(x, y, tNow*0.001);
+        const warp = state.turbInt * (0.7 + 0.6*Math.abs(Math.sin((tNow*0.002)+(i*0.25))));
+        x += fv.x * warp * 6;
+        y += fv.y * warp * 6;
+      }
+
+      // subtle wiggle normal to the segment
+      const nval = (noise3(x*0.015, y*0.015, tNow*0.001) - 0.5) * 2;
+      const nx = -dy / dist, ny = dx / dist;
+      const tiltW = (state.tiltX + state.tiltY)*0.5;
+      const wiggle = (state.scatter*8 + w*0.05) * (nval + tiltW*state.sensorInf*0.4);
+      x += nx * wiggle; y += ny * wiggle;
+
+      const col = lockedColor || getStrokeColor(x, y, segSpeed, segDir, tNow, i, dist);
+      ctx.strokeStyle = col;
+      if (state.glow > 0) ctx.shadowColor = col;
+
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+
+      x0 = x; y0 = y;
+    }
+
+    ctx.restore();
+  }
+
+  // Dots/Spray (legacy, optional look)
+  function drawDottySegment(a, b, dt=16, preDist=null, mode='dots'){
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = preDist ?? Math.hypot(dx, dy);
     if (dist < 0.5) return;
 
     const tNow = performance.now();
+    const nx = -dy / dist, ny = dx / dist;
     const stepBase = Math.max(1, state.brushSize * 0.32);
     const steps = Math.max(1, Math.floor(dist / Math.max(1, stepBase)));
-    const nx = -dy / dist, ny = dx / dist;
 
     ctx.save();
     ctx.globalCompositeOperation = state.composite;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.shadowBlur = state.glow;
+    ctx.shadowBlur = state.glow || 0;
     ctx.globalAlpha = 0.95;
 
     for (let i=0; i<=steps; i++){
@@ -637,7 +714,6 @@ Copy this whole file into an .html and open on your phone.
       let x = lerp(a.x, b.x, f);
       let y = lerp(a.y, b.y, f);
 
-      // Turbulence warp
       if (state.turbMode !== 'off' && state.turbInt > 0){
         const fv = flowVec(x, y, tNow*0.001);
         const warp = state.turbInt * (0.8 + 0.6*Math.abs(Math.sin((tNow*0.002)+(i*0.3))));
@@ -645,51 +721,32 @@ Copy this whole file into an .html and open on your phone.
         y += fv.y * warp * (6 + state.brushSize*0.2);
       }
 
-      // Organic wiggle + sensor tilt on normal
       const nval = (noise3(x*0.015, y*0.015, tNow*0.001) - 0.5) * 2;
       const tiltW = (state.tiltX + state.tiltY)*0.5;
       const wiggle = (state.scatter*12 + state.brushSize*0.12) * (nval + tiltW*state.sensorInf*0.6);
-      x += nx * wiggle;
-      y += ny * wiggle;
+      x += nx * wiggle; y += ny * wiggle;
 
       const pressure = state.pointers.size ? [...state.pointers.values()][0]?.pressure || 0.7 : 0.7;
       const accelBoost = (state.accelMag * 0.03) * state.sensorInf;
       const size = Math.max(1, state.brushSize * (0.6 + 0.4*Math.abs(nval)) * (0.85 + accelBoost) * (0.6 + 0.7*pressure));
-      const hueShift = dist * state.colorSpeed * 0.3 + i * state.colorSpeed * 1.1 + ((state.yaw - state.yawBias)*15*state.sensorInf);
-      const col = getColor(state.palette, state.colorOffset + hueShift, x, y);
+
+      const segSpeed = dist / Math.max(1, dt);
+      const segDir = Math.atan2(dy, dx);
+      const col = getStrokeColor(x, y, segSpeed, segDir, tNow, i, dist);
 
       ctx.shadowColor = col;
       ctx.fillStyle = col;
 
-      if (state.brush === 'soft'){
-        ctx.beginPath();
-        ctx.arc(x, y, size*0.5, 0, Math.PI*2);
-        ctx.fill();
+      if (mode === 'dots'){
+        ctx.beginPath(); ctx.arc(x, y, size*0.5, 0, Math.PI*2); ctx.fill();
       } else {
         const sprayCount = 3;
         for (let s=0; s<sprayCount; s++){
           const ang = Math.random()*Math.PI*2;
           const rad = size * (0.2 + Math.random()*0.6) * state.scatter * 1.4;
-          const sx = x + Math.cos(ang)*rad;
-          const sy = y + Math.sin(ang)*rad;
+          const sx = x + Math.cos(ang)*rad, sy = y + Math.sin(ang)*rad;
           ctx.globalAlpha = 0.35 + Math.random()*0.25;
-          ctx.beginPath();
-          ctx.arc(sx, sy, size*(0.12 + Math.random()*0.24), 0, Math.PI*2);
-          ctx.fill();
-          ctx.globalAlpha = 0.95;
-        }
-      }
-
-      // sparkles
-      if (state.scatter > 0.12 && (i % 2 === 0)){
-        const sp = (noise3(x*0.03, y*0.03, tNow*0.003) - 0.5) * 2;
-        if (Math.abs(sp) > 0.35){
-          const sx = x + (Math.random()-0.5)*size*state.scatter*2;
-          const sy = y + (Math.random()-0.5)*size*state.scatter*2;
-          ctx.globalAlpha = 0.3;
-          ctx.beginPath();
-          ctx.arc(sx, sy, size*0.2, 0, Math.PI*2);
-          ctx.fill();
+          ctx.beginPath(); ctx.arc(sx, sy, size*(0.12 + Math.random()*0.24), 0, Math.PI*2); ctx.fill();
           ctx.globalAlpha = 0.95;
         }
       }
@@ -701,11 +758,7 @@ Copy this whole file into an .html and open on your phone.
   function makeAgents(n=6){
     state.agents = [];
     for (let i=0;i<n;i++){
-      state.agents.push({
-        x: state.cx + (Math.random()-0.5)*state.width*0.4,
-        y: state.cy + (Math.random()-0.5)*state.height*0.4,
-        vx: 0, vy: 0,
-      });
+      state.agents.push({ x: state.cx + (Math.random()-0.5)*state.width*0.4, y: state.cy + (Math.random()-0.5)*state.height*0.4, vx: 0, vy: 0 });
     }
   }
   function stepAgents(dt){
@@ -723,109 +776,85 @@ Copy this whole file into an .html and open on your phone.
     }
   }
 
-  // Bounds helpers
+  // Bounds
   function bound(p){
+    const pad = state.edgePad;
+    const w = state.width, h = state.height;
     const m = state.boundsMode;
     if (m === 'wrap'){
-      if (p.x < -20) p.x = state.width+20;
-      if (p.x > state.width+20) p.x = -20;
-      if (p.y < -20) p.y = state.height+20;
-      if (p.y > state.height+20) p.y = -20;
+      if (p.x < 0 - pad) { p.x = w + pad; }
+      if (p.x > w + pad) { p.x = 0 - pad; }
+      if (p.y < 0 - pad) { p.y = h + pad; }
+      if (p.y > h + pad) { p.y = 0 - pad; }
     } else if (m === 'bounce'){
-      if (p.x < 0){ p.x = 0; p.vx = -p.vx*0.9; }
-      if (p.x > state.width){ p.x = state.width; p.vx = -p.vx*0.9; }
-      if (p.y < 0){ p.y = 0; p.vy = -p.vy*0.9; }
-      if (p.y > state.height){ p.y = state.height; p.vy = -p.vy*0.9; }
-    } else { // clamp
-      p.x = clamp(p.x, 0, state.width);
-      p.y = clamp(p.y, 0, state.height);
+      if (p.x < 0 + pad){ p.x = 0 + pad; p.vx = -p.vx*0.9; }
+      if (p.x > w - pad){ p.x = w - pad; p.vx = -p.vx*0.9; }
+      if (p.y < 0 + pad){ p.y = 0 + pad; p.vy = -p.vy*0.9; }
+      if (p.y > h - pad){ p.y = h - pad; p.vy = -p.vy*0.9; }
+    } else {
+      p.x = clamp(p.x, 0 + pad, w - pad);
+      p.y = clamp(p.y, 0 + pad, h - pad);
     }
   }
 
-  // Sensor painter (draws without touch when sensor modes enabled)
+  // Sensor painter
   function getScreenAngleRad(){
     const o = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
     return (o % 360) * Math.PI/180;
   }
 
   function updateSensorPainter(dt){
-    if (!state.sensorsEnabled || state.sensorMode === 'off' || !state.sensorDraws) return;
+    if (!state.sensorsEnabled || state.sensorMode === 'off' || !state.sensorDraws) { state.sensorSpeed = 0; return; }
 
     const now = performance.now();
     const p = state.sensor;
     if (!p.inited){
-      p.x = state.cx; p.y = state.cy;
-      p.lastX = p.x; p.lastY = p.y;
-      p.vx = 0; p.vy = 0;
-      p.inited = true;
+      p.x = state.cx; p.y = state.cy; p.lastX = p.x; p.lastY = p.y; p.vx = 0; p.vy = 0; p.inited = true;
     }
 
     const dtSec = Math.max(0.001, dt * 0.001);
-    const rotZ = state.rot.alpha || 0; // yaw-like rotation rate (deg/s)
+    const rotZ = state.rot.alpha || 0; // deg/s
     const ang = -getScreenAngleRad();
 
     if (state.sensorMode === 'tilt'){
-      // Stable tilt mapping (no velocity feedback)
-      const reach = 0.46; // fraction of screen
+      const reach = 0.46;
       const tx = state.cx + (state.tiltX * state.width * reach);
       const ty = state.cy + (state.tiltY * state.height * reach);
-      // critically-damped smoothing toward target
       const smoothing = 1 - Math.pow(1 - (0.22 + state.sensorInf*0.5), dtSec*60);
       p.x = lerp(p.x, tx, smoothing);
       p.y = lerp(p.y, ty, smoothing);
-      // small swirl from flow to keep organic
       const f = flowVec(p.x, p.y, now*0.001);
       p.x += f.x * state.turbInt * 8 * dtSec;
       p.y += f.y * state.turbInt * 8 * dtSec;
+      bound(p);
     } else if (state.sensorMode === 'motion' || state.sensorMode === 'motion-swirl'){
-      // Acceleration-driven velocity
-      // choose linear acceleration for stability
       let ax = state.ax, ay = state.ay;
-      // rotate device axes to screen coords
       const rx = ax * Math.cos(ang) - ay * Math.sin(ang);
       const ry = ax * Math.sin(ang) + ay * Math.cos(ang);
       const mag = Math.hypot(rx, ry);
       const dz = state.deadzone;
       const gain = 45 * state.motionSens * (0.5 + state.sensorInf);
-
       const driveX = (mag > dz ? (rx / (mag || 1)) * (mag - dz) : 0) * gain;
       const driveY = (mag > dz ? (ry / (mag || 1)) * (mag - dz) : 0) * gain;
+      p.vx += driveX * dtSec; p.vy += driveY * dtSec;
 
-      p.vx += driveX * dtSec;
-      p.vy += driveY * dtSec;
-
-      // Flow + optional gyro swirl
       const f = flowVec(p.x, p.y, now*0.001);
       let swirl = 0;
-      if (state.sensorMode === 'motion-swirl'){
-        swirl = clamp(rotZ/180, -2, 2) * state.sensorInf; // convert deg/s to a small factor
-      }
-      // apply flow
+      if (state.sensorMode === 'motion-swirl'){ swirl = clamp(rotZ/180, -2, 2) * state.sensorInf; }
       p.vx += f.x * state.turbInt * (16 + Math.abs(swirl)*10) * dtSec;
       p.vy += f.y * state.turbInt * (16 + Math.abs(swirl)*10) * dtSec;
-      // apply swirl by rotating velocity vector
       if (swirl !== 0){
         const s = Math.sin(swirl * dtSec), c = Math.cos(swirl * dtSec);
-        const vx = p.vx*c - p.vy*s;
-        const vy = p.vx*s + p.vy*c;
+        const vx = p.vx*c - p.vy*s, vy = p.vx*s + p.vy*c;
         p.vx = vx; p.vy = vy;
       }
-
-      // friction
-      p.vx *= state.friction;
-      p.vy *= state.friction;
-
-      // move
-      p.x += p.vx;
-      p.y += p.vy;
-
+      p.vx *= state.friction; p.vy *= state.friction;
+      p.x += p.vx; p.y += p.vy;
       bound(p);
     } else if (state.sensorMode === 'gyro-orbit'){
-      // Orbit center; rotation rate controls angular speed; acceleration controls radius
-      const angleSpeed = (rotZ/180) * (0.8 + state.sensorInf*1.6); // rev/sec-ish scaled
-      // radius target from acceleration magnitude
+      const angleSpeed = (rotZ/180) * (0.8 + state.sensorInf*1.6);
       const rMax = Math.min(state.width, state.height)*0.38;
-      const rTarget = clamp((state.accelMag - 3)/7, 0, 1) * rMax; // ~3..10 m/s^2
+      const rTarget = clamp((state.accelMag - 3)/7, 0, 1) * rMax;
       p._orbitR = lerp(p._orbitR || (rMax*0.25), rTarget, 1 - Math.pow(1-0.25, dtSec*60));
       p._orbitA = (p._orbitA || 0) + angleSpeed * dtSec * Math.PI*2;
       const tx = state.cx + Math.cos(p._orbitA)*p._orbitR;
@@ -833,23 +862,21 @@ Copy this whole file into an .html and open on your phone.
       const smoothing = 1 - Math.pow(1 - 0.28, dtSec*60);
       p.x = lerp(p.x, tx, smoothing);
       p.y = lerp(p.y, ty, smoothing);
+      bound(p);
     }
 
-    // Compute speed for gating
-    const speed = Math.hypot(p.x - p.lastX, p.y - p.lastY) / Math.max(1, dt);
-    // Draw if moving enough
+    const speedPx = Math.hypot(p.x - p.lastX, p.y - p.lastY);
+    const speed = speedPx / Math.max(1, dt); // px/ms
+    state.sensorSpeed = speed;
+
     if (speed > state.minDrawSpeed){
       const old = { x: p.lastX, y: p.lastY, t: now - dt };
       const cur = { x: p.x, y: p.y, t: now };
-      // teleport guard here too
       const dist = Math.hypot(cur.x-old.x, cur.y-old.y);
       const MAX_SEG = Math.min(state.width, state.height) * 0.35;
-      if (dist <= MAX_SEG){
-        drawSymmetricSegment(old, cur);
-      }
+      if (dist <= MAX_SEG) drawSymmetricSegment(old, cur, dt, dist);
       p.lastX = p.x; p.lastY = p.y;
     } else {
-      // update without drawing
       p.lastX = p.x; p.lastY = p.y;
     }
   }
@@ -859,36 +886,35 @@ Copy this whole file into an .html and open on your phone.
   function tick(){
     const now = performance.now();
     let dt = now - lastFrame;
-    // Clamp dt to avoid huge teleports after tab switch
-    if (dt > 120) dt = 16;
+    if (dt > 120) dt = 16; // clamp after tab switches
     lastFrame = now;
 
-    // trail fade
+    // fade
     if (state.fade > 0){
       ctx.save();
       ctx.globalCompositeOperation = 'source-over';
       const alpha = clamp(state.fade, 0, 1);
-      if (state.bgMode === 'light'){
-        ctx.fillStyle = `rgba(250,252,255,${alpha})`;
-      } else if (state.bgMode === 'deep'){
-        ctx.fillStyle = `rgba(0,0,0,${alpha*0.95})`;
-      } else {
-        ctx.fillStyle = `rgba(5,5,8,${alpha})`;
-      }
+      if (state.bgMode === 'light') ctx.fillStyle = `rgba(250,252,255,${alpha})`;
+      else if (state.bgMode === 'deep') ctx.fillStyle = `rgba(0,0,0,${alpha*0.95})`;
+      else ctx.fillStyle = `rgba(5,5,8,${alpha})`;
       ctx.fillRect(0,0,state.width,state.height);
       ctx.restore();
     }
 
-    // symmetry yaw rotation (use calibrated yawBias)
+    // symmetry rotation
     state.rotOffset = (state.yaw - state.yawBias) * 0.15 * state.sensorInf;
 
-    // sensor painter
+    // sensor brush
     updateSensorPainter(dt);
 
-    // auto agents
-    if (state.auto){
-      stepAgents(dt);
-    }
+    // heat update
+    const accelVal = map01(state.accelMag, 0, Math.max(1, state.metricRange));
+    const speedVal = map01(state.sensorSpeed*1000, 0, state.metricRange);
+    const energy = (accelVal + speedVal) * 0.5 * state.heatGain;
+    state.heat = clamp(state.heat + energy*dt*0.001 - state.heatDecay*dt*0.001, 0, 1);
+
+    // auto
+    if (state.auto) stepAgents(dt);
 
     requestAnimationFrame(tick);
   }
@@ -921,48 +947,36 @@ Copy this whole file into an .html and open on your phone.
       motionListenerAdded = true;
     }
   }
-
-  // Orientation (tilt)
   function onOrientation(e){
     if (!state.sensorsEnabled) return;
-    const beta = e.beta ?? 0;   // x tilt (-180,180)
-    const gamma = e.gamma ?? 0; // y tilt (-90,90)
-    const alpha = e.alpha ?? 0; // yaw
-    // Normalize to -1..1
+    const beta = e.beta ?? 0, gamma = e.gamma ?? 0, alpha = e.alpha ?? 0;
     state.tiltX = clamp(gamma/45, -1, 1);
     state.tiltY = clamp(beta/45, -1, 1);
     state.yaw = alpha/180 - 1;
   }
-
-  // Motion (accel + rotation)
-  const lp = { ax:0, ay:0, az:0, gx:0, gy:0, gz:0 }; // low-pass states
+  const lp = { ax:0, ay:0, az:0, gx:0, gy:0, gz:0 };
   function onMotion(e){
     if (!state.sensorsEnabled) return;
     const inc = e.accelerationIncludingGravity || {x:0,y:0,z:0};
-    const lin = e.acceleration || null; // often null on iOS
+    const lin = e.acceleration || null;
     const r = e.rotationRate || { alpha:0, beta:0, gamma:0 };
 
-    // Low-pass gravity estimate from including-gravity accel
     const a = clamp(state.filterStrength, 0, 0.95);
     lp.gx = a*lp.gx + (1-a)*(inc.x || 0);
     lp.gy = a*lp.gy + (1-a)*(inc.y || 0);
     lp.gz = a*lp.gz + (1-a)*(inc.z || 0);
 
-    // Linear acceleration: prefer OS-provided, else subtract gravity estimate
     const lax = (lin && isFinite(lin.x)) ? lin.x : (inc.x - lp.gx);
     const lay = (lin && isFinite(lin.y)) ? lin.y : (inc.y - lp.gy);
     const laz = (lin && isFinite(lin.z)) ? lin.z : (inc.z - lp.gz);
 
-    // Low-pass linear accel for stability
-    lp.ax = a*lp.ax + (1-a)*(lax);
-    lp.ay = a*lp.ay + (1-a)*(lay);
-    lp.az = a*lp.az + (1-a)*(laz);
+    lp.ax = a*lp.ax + (1-a)*lax;
+    lp.ay = a*lp.ay + (1-a)*lay;
+    lp.az = a*lp.az + (1-a)*laz;
 
-    // Choose data: linear (preferred) or including gravity if toggle off
-    const useLin = state.useLinear;
-    state.ax = useLin ? lp.ax : lp.gx;
-    state.ay = useLin ? lp.ay : lp.gy;
-    state.az = useLin ? lp.az : lp.gz;
+    state.ax = state.useLinear ? lp.ax : lp.gx;
+    state.ay = state.useLinear ? lp.ay : lp.gy;
+    state.az = state.useLinear ? lp.az : lp.gz;
 
     const ai = e.accelerationIncludingGravity || {x:0,y:0,z:0};
     state.accelMag = Math.sqrt((ai.x||0)**2 + (ai.y||0)**2 + (ai.z||0)**2);
@@ -970,7 +984,7 @@ Copy this whole file into an .html and open on your phone.
     state.rotMag = Math.sqrt((state.rot.alpha)**2 + (state.rot.beta)**2 + (state.rot.gamma)**2);
   }
 
-  // Controls/UI
+  // UI wiring
   const panel = document.getElementById('panel');
   const menuBtn = document.getElementById('menuBtn');
   const saveBtn = document.getElementById('saveBtn');
@@ -980,43 +994,52 @@ Copy this whole file into an .html and open on your phone.
   const hint = document.getElementById('hint');
 
   const paletteEl = document.getElementById('palette');
-  const colorSpeed = document.getElementById('colorSpeed');
-  const colorSpeedVal = document.getElementById('colorSpeedVal');
-  const size = document.getElementById('size');
-  const sizeVal = document.getElementById('sizeVal');
-  const glow = document.getElementById('glow');
-  const glowVal = document.getElementById('glowVal');
-  const sym = document.getElementById('sym');
-  const symVal = document.getElementById('symVal');
-  const mirror = document.getElementById('mirror');
-  const kaleido = document.getElementById('kaleido');
-  const fade = document.getElementById('fade');
-  const fadeVal = document.getElementById('fadeVal');
-  const scatter = document.getElementById('scatter');
-  const scatterVal = document.getElementById('scatterVal');
+  const colorModeEl = document.getElementById('colorMode');
+  const metricRange = document.getElementById('metricRange');
+  const metricRangeVal = document.getElementById('metricRangeVal');
+  const metricRangeLabel = document.getElementById('metricRangeLabel');
+  const heatControls = document.getElementById('heatControls');
+  const heatGain = document.getElementById('heatGain'), heatGainVal = document.getElementById('heatGainVal');
+  const heatDecay = document.getElementById('heatDecay'), heatDecayVal = document.getElementById('heatDecayVal');
+  const colorSpeed = document.getElementById('colorSpeed'), colorSpeedVal = document.getElementById('colorSpeedVal');
+  const lockColor = document.getElementById('lockColor');
+
+  const brushType = document.getElementById('brushType');
+  const strokeBlock = document.getElementById('strokeBlock');
+  const dotsBlock = document.getElementById('dotsBlock');
+  const widthMode = document.getElementById('widthMode');
+  const widthMin = document.getElementById('widthMin'), widthMinVal = document.getElementById('widthMinVal');
+  const widthMax = document.getElementById('widthMax'), widthMaxVal = document.getElementById('widthMaxVal');
+  const widthRange = document.getElementById('widthRange'), widthRangeVal = document.getElementById('widthRangeVal');
+  const widthRangeLabel = document.getElementById('widthRangeLabel');
+  const strokeAlpha = document.getElementById('strokeAlpha'), strokeAlphaVal = document.getElementById('strokeAlphaVal');
+  const strokeDetail = document.getElementById('strokeDetail'), strokeDetailVal = document.getElementById('strokeDetailVal');
+  const lineCap = document.getElementById('lineCap');
+  const lineJoin = document.getElementById('lineJoin');
+
+  const size = document.getElementById('size'), sizeVal = document.getElementById('sizeVal');
+  const glow = document.getElementById('glow'), glowVal = document.getElementById('glowVal');
+
+  const sym = document.getElementById('sym'), symVal = document.getElementById('symVal');
+  const mirror = document.getElementById('mirror'), kaleido = document.getElementById('kaleido');
+
+  const fade = document.getElementById('fade'), fadeVal = document.getElementById('fadeVal');
+  const scatter = document.getElementById('scatter'), scatterVal = document.getElementById('scatterVal');
 
   const turbMode = document.getElementById('turbMode');
-  const turbInt = document.getElementById('turbInt');
-  const turbIntVal = document.getElementById('turbIntVal');
-  const turbScale = document.getElementById('turbScale');
-  const turbScaleVal = document.getElementById('turbScaleVal');
-  const turbSpeed = document.getElementById('turbSpeed');
-  const turbSpeedVal = document.getElementById('turbSpeedVal');
+  const turbInt = document.getElementById('turbInt'), turbIntVal = document.getElementById('turbIntVal');
+  const turbScale = document.getElementById('turbScale'), turbScaleVal = document.getElementById('turbScaleVal');
+  const turbSpeed = document.getElementById('turbSpeed'), turbSpeedVal = document.getElementById('turbSpeedVal');
 
   const sensorMode = document.getElementById('sensorMode');
-  const sensorInf = document.getElementById('sensorInf');
-  const sensorInfVal = document.getElementById('sensorInfVal');
-  const motionSens = document.getElementById('motionSens');
-  const motionSensVal = document.getElementById('motionSensVal');
-  const friction = document.getElementById('friction');
-  const frictionVal = document.getElementById('frictionVal');
-  const deadzone = document.getElementById('deadzone');
-  const deadzoneVal = document.getElementById('deadzoneVal');
-  const minDraw = document.getElementById('minDraw');
-  const minDrawVal = document.getElementById('minDrawVal');
-  const filter = document.getElementById('filter');
-  const filterVal = document.getElementById('filterVal');
+  const sensorInf = document.getElementById('sensorInf'), sensorInfVal = document.getElementById('sensorInfVal');
+  const motionSens = document.getElementById('motionSens'), motionSensVal = document.getElementById('motionSensVal');
+  const friction = document.getElementById('friction'), frictionVal = document.getElementById('frictionVal');
+  const deadzone = document.getElementById('deadzone'), deadzoneVal = document.getElementById('deadzoneVal');
+  const minDraw = document.getElementById('minDraw'), minDrawVal = document.getElementById('minDrawVal');
+  const filter = document.getElementById('filter'), filterVal = document.getElementById('filterVal');
   const boundsMode = document.getElementById('boundsMode');
+  const edgePad = document.getElementById('edgePad'), edgePadVal = document.getElementById('edgePadVal');
   const useLinear = document.getElementById('useLinear');
   const shakeClear = document.getElementById('shakeClear');
   const sensorDraw = document.getElementById('sensorDraw');
@@ -1030,62 +1053,77 @@ Copy this whole file into an .html and open on your phone.
   const quality = document.getElementById('quality');
   const resetView = document.getElementById('resetView');
 
-  const brushSoft = document.getElementById('brushSoft');
-  const brushSpray = document.getElementById('brushSpray');
-
   menuBtn.addEventListener('click', () => panel.classList.toggle('hidden'));
 
   saveBtn.addEventListener('click', () => {
     try {
       const url = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `psychedelic-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch (e){
-      window.open(canvas.toDataURL('image/png'), '_blank');
-    }
+      const a = document.createElement('a'); a.href = url; a.download = `psychedelic-${Date.now()}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch (e){ window.open(canvas.toDataURL('image/png'), '_blank'); }
   });
-
   clearBtn.addEventListener('click', () => paintBackground(true));
-
   autoBtn.addEventListener('click', () => {
     state.auto = !state.auto;
     autoBtn.textContent = state.auto ? 'Auto (On)' : 'Auto';
     if (state.auto && state.agents.length === 0) makeAgents(6);
   });
-
   sensorBtn.addEventListener('click', () => {
-    if (!state.sensorsEnabled) {
-      enableSensors();
-    } else {
+    if (!state.sensorsEnabled) enableSensors();
+    else {
       state.sensorsEnabled = false;
-      state.sensorMode = 'off';
-      sensorMode.value = 'off';
-      sensorBtn.classList.remove('active');
-      sensorBtn.innerHTML = '📳 Sensors';
+      state.sensorMode = 'off'; sensorMode.value = 'off';
+      sensorBtn.classList.remove('active'); sensorBtn.innerHTML = '📳 Sensors';
     }
   });
 
-  // Brush toggle
-  function setBrush(name){
-    state.brush = name;
-    brushSoft.classList.toggle('active', name==='soft');
-    brushSpray.classList.toggle('active', name==='spray');
-  }
-  brushSoft.addEventListener('click', ()=>setBrush('soft'));
-  brushSpray.addEventListener('click', ()=>setBrush('spray'));
-
-  // Wiring
   paletteEl.addEventListener('change', e => state.palette = e.target.value);
+  colorModeEl.addEventListener('change', e => {
+    state.colorMode = e.target.value;
+    if (state.colorMode === 'velocity'){ metricRangeLabel.firstChild.textContent = 'Velocity range (px/s) '; metricRange.max = 2000; metricRange.value = 600; }
+    else if (state.colorMode === 'accel'){ metricRangeLabel.firstChild.textContent = 'Accel range (m/s²) '; metricRange.max = 40; metricRange.value = 18; }
+    else if (state.colorMode === 'spin'){ metricRangeLabel.firstChild.textContent = 'Spin range (deg/s) '; metricRange.max = 1000; metricRange.value = 400; }
+    else if (state.colorMode === 'direction'){ metricRangeLabel.firstChild.textContent = 'Metric range '; metricRange.value = 180; }
+    else if (state.colorMode === 'heat'){ metricRangeLabel.firstChild.textContent = 'Heat drive range '; metricRange.value = 180; }
+    else { metricRangeLabel.firstChild.textContent = 'Metric range '; metricRange.value = 180; }
+    state.metricRange = +metricRange.value; metricRangeVal.textContent = state.metricRange;
+    heatControls.style.display = (state.colorMode === 'heat') ? 'block' : 'none';
+  });
+  metricRange.addEventListener('input', e => { state.metricRange = +e.target.value; metricRangeVal.textContent = state.metricRange; });
+  heatGain.addEventListener('input', e => { state.heatGain = +e.target.value; heatGainVal.textContent = state.heatGain.toFixed(2); });
+  heatDecay.addEventListener('input', e => { state.heatDecay = +e.target.value; heatDecayVal.textContent = state.heatDecay.toFixed(2); });
   colorSpeed.addEventListener('input', e => { state.colorSpeed = +e.target.value; colorSpeedVal.textContent = state.colorSpeed.toFixed(2); });
+  lockColor.addEventListener('click', () => {
+    state.stroke.lockColor = !state.stroke.lockColor;
+    lockColor.classList.toggle('active', state.stroke.lockColor);
+  });
+
+  brushType.addEventListener('change', e => {
+    state.brush = e.target.value;
+    strokeBlock.style.display = (state.brush === 'stroke') ? 'block' : 'none';
+    dotsBlock.style.display = (state.brush !== 'stroke') ? 'block' : 'none';
+  });
+
+  widthMode.addEventListener('change', e => {
+    state.stroke.widthMode = e.target.value;
+    widthRangeLabel.style.display = (state.stroke.widthMode === 'speed') ? 'block' : 'block';
+    widthRange.style.display = (state.stroke.widthMode === 'speed') ? 'block' : 'block';
+  });
+  widthMin.addEventListener('input', e => { state.stroke.widthMin = +e.target.value; widthMinVal.textContent = state.stroke.widthMin|0; });
+  widthMax.addEventListener('input', e => { state.stroke.widthMax = +e.target.value; widthMaxVal.textContent = state.stroke.widthMax|0; });
+  widthRange.addEventListener('input', e => { state.stroke.widthRange = +e.target.value; widthRangeVal.textContent = state.stroke.widthRange|0; });
+  strokeAlpha.addEventListener('input', e => { state.stroke.alpha = +e.target.value; strokeAlphaVal.textContent = state.stroke.alpha.toFixed(2); });
+  strokeDetail.addEventListener('input', e => { state.stroke.detail = +e.target.value; strokeDetailVal.textContent = state.stroke.detail.toFixed(2); });
+  lineCap.addEventListener('change', e => state.stroke.cap = e.target.value);
+  lineJoin.addEventListener('change', e => state.stroke.join = e.target.value);
+
   size.addEventListener('input', e => { state.brushSize = +e.target.value; sizeVal.textContent = state.brushSize|0; });
   glow.addEventListener('input', e => { state.glow = +e.target.value; glowVal.textContent = state.glow|0; });
+
   sym.addEventListener('input', e => { state.symmetry = parseInt(e.target.value,10); symVal.textContent = state.symmetry; });
   mirror.addEventListener('click', () => { state.mirror = !state.mirror; mirror.classList.toggle('active', state.mirror); });
   kaleido.addEventListener('click', () => { state.kaleido = !state.kaleido; kaleido.classList.toggle('active', state.kaleido); });
+
   fade.addEventListener('input', e => { state.fade = +e.target.value; fadeVal.textContent = state.fade.toFixed(3); });
   scatter.addEventListener('input', e => { state.scatter = +e.target.value; scatterVal.textContent = state.scatter.toFixed(2); });
 
@@ -1096,7 +1134,7 @@ Copy this whole file into an .html and open on your phone.
 
   sensorMode.addEventListener('change', e => {
     state.sensorMode = e.target.value;
-    state.sensor.inited = false; // re-center painter on mode change
+    state.sensor.inited = false;
     if (state.sensorMode !== 'off' && !state.sensorsEnabled) enableSensors();
   });
   sensorInf.addEventListener('input', e => { state.sensorInf = +e.target.value; sensorInfVal.textContent = state.sensorInf.toFixed(2); });
@@ -1106,81 +1144,62 @@ Copy this whole file into an .html and open on your phone.
   minDraw.addEventListener('input', e => { state.minDrawSpeed = +e.target.value; minDrawVal.textContent = state.minDrawSpeed.toFixed(2); });
   filter.addEventListener('input', e => { state.filterStrength = +e.target.value; filterVal.textContent = state.filterStrength.toFixed(2); });
   boundsMode.addEventListener('change', e => state.boundsMode = e.target.value);
-  useLinear.addEventListener('click', () => {
-    state.useLinear = !state.useLinear;
-    useLinear.classList.toggle('active', state.useLinear);
-  });
-  shakeClear.addEventListener('click', () => {
-    state.shakeClears = !state.shakeClears;
-    shakeClear.classList.toggle('active', state.shakeClears);
-  });
-  sensorDraw.addEventListener('click', () => {
-    state.sensorDraws = !state.sensorDraws;
-    sensorDraw.classList.toggle('active', state.sensorDraws);
-  });
-  calibrate.addEventListener('click', () => {
-    state.yawBias = state.yaw;
-    // also zero tilt baseline
-    state._tiltBiasX = state.tiltX;
-    state._tiltBiasY = state.tiltY;
-  });
-  center.addEventListener('click', () => {
-    state.sensor.inited = false;
-  });
+  edgePad.addEventListener('input', e => { state.edgePad = +e.target.value; edgePadVal.textContent = state.edgePad|0; });
+
+  useLinear.addEventListener('click', () => { state.useLinear = !state.useLinear; useLinear.classList.toggle('active', state.useLinear); });
+  shakeClear.addEventListener('click', () => { state.shakeClears = !state.shakeClears; shakeClear.classList.toggle('active', state.shakeClears); });
+  sensorDraw.addEventListener('click', () => { state.sensorDraws = !state.sensorDraws; sensorDraw.classList.toggle('active', state.sensorDraws); });
+  calibrate.addEventListener('click', () => { state.yawBias = state.yaw; state._tiltBiasX = state.tiltX; state._tiltBiasY = state.tiltY; });
+  center.addEventListener('click', () => { state.sensor.inited = false; });
 
   bgMode.addEventListener('change', e => { state.bgMode = e.target.value; paintBackground(true); });
-
   composite.addEventListener('click', () => {
     state.composite = (state.composite === 'lighter') ? 'source-over' : 'lighter';
     composite.textContent = (state.composite === 'lighter') ? 'Additive' : 'Normal';
     composite.classList.toggle('active', state.composite === 'lighter');
   });
-
   randomize.addEventListener('click', () => {
     state.colorOffset = Math.random()*360;
-    state.brushSize = Math.floor(10 + Math.random()*80);
-    size.value = state.brushSize; sizeVal.textContent = state.brushSize;
-    state.glow = Math.floor(Math.random()*60);
-    glow.value = state.glow; glowVal.textContent = state.glow;
-    state.scatter = +(Math.random().toFixed(2));
-    scatter.value = state.scatter; scatterVal.textContent = state.scatter.toFixed(2);
-    state.symmetry = Math.floor(1 + Math.random()*18);
-    sym.value = state.symmetry; symVal.textContent = state.symmetry;
-    state.palette = ['Rainbow','Neon','Sunset','Ocean','Acid'][Math.floor(Math.random()*5)];
-    paletteEl.value = state.palette;
-    state.turbMode = Math.random() > 0.5 ? 'curl' : 'noise';
-    turbMode.value = state.turbMode;
-    state.turbInt = +(Math.random()*1.1).toFixed(2);
-    turbInt.value = state.turbInt; turbIntVal.textContent = state.turbInt.toFixed(2);
-    state.turbScale = +(0.002 + Math.random()*0.02).toFixed(3);
-    turbScale.value = state.turbScale; turbScaleVal.textContent = state.turbScale.toFixed(3);
-    state.turbSpeed = +(Math.random()*1.2).toFixed(2);
-    turbSpeed.value = state.turbSpeed; turbSpeedVal.textContent = state.turbSpeed.toFixed(2);
+    state.stroke.widthMin = Math.floor(1 + Math.random()*6);
+    state.stroke.widthMax = Math.floor(8 + Math.random()*40);
+    widthMin.value = state.stroke.widthMin; widthMinVal.textContent = state.stroke.widthMin|0;
+    widthMax.value = state.stroke.widthMax; widthMaxVal.textContent = state.stroke.widthMax|0;
+    state.stroke.detail = +(0.8 + Math.random()*1.8).toFixed(2);
+    strokeDetail.value = state.stroke.detail; strokeDetailVal.textContent = state.stroke.detail.toFixed(2);
+    state.glow = Math.floor(Math.random()*12); glow.value = state.glow; glowVal.textContent = state.glow;
+    state.scatter = +(Math.random().toFixed(2)); scatter.value = state.scatter; scatterVal.textContent = state.scatter.toFixed(2);
+    state.symmetry = Math.floor(1 + Math.random()*18); sym.value = state.symmetry; symVal.textContent = state.symmetry;
+    state.palette = ['Rainbow','Neon','Sunset','Ocean','Acid'][Math.floor(Math.random()*5)]; paletteEl.value = state.palette;
+    state.turbMode = Math.random() > 0.5 ? 'curl' : 'noise'; turbMode.value = state.turbMode;
+    state.turbInt = +(Math.random()*1.1).toFixed(2); turbInt.value = state.turbInt; turbIntVal.textContent = state.turbInt.toFixed(2);
+    state.turbScale = +(0.002 + Math.random()*0.02).toFixed(3); turbScale.value = state.turbScale; turbScaleVal.textContent = state.turbScale.toFixed(3);
+    state.turbSpeed = +(Math.random()*1.2).toFixed(2); turbSpeed.value = state.turbSpeed; turbSpeedVal.textContent = state.turbSpeed.toFixed(2);
   });
 
   quality.addEventListener('change', e => {
     state.quality = e.target.value;
     if (state.quality === 'performance') {
-      DPR_MAX = 1;
-      state.glow = Math.min(state.glow, 18);
-      glow.value = state.glow; glowVal.textContent = state.glow|0;
+      DPR_MAX = 1; state.glow = 0; glow.value = state.glow; glowVal.textContent = state.glow|0;
     } else if (state.quality === 'high') {
       DPR_MAX = 2.5;
-    } else {
-      DPR_MAX = 2;
-    }
+    } else { DPR_MAX = 2; }
     resize(true);
   });
-
-  resetView.addEventListener('click', () => {
-    state.colorOffset = Math.random()*360;
-    state.rotOffset = 0;
-    paintBackground(true);
-  });
+  resetView.addEventListener('click', () => { state.colorOffset = Math.random()*360; state.rotOffset = 0; paintBackground(true); });
 
   // Init labels and UI
   function syncLabels(){
+    metricRangeVal.textContent = state.metricRange;
+    heatGainVal.textContent = state.heatGain.toFixed(2);
+    heatDecayVal.textContent = state.heatDecay.toFixed(2);
     colorSpeedVal.textContent = state.colorSpeed.toFixed(2);
+
+    widthMinVal.textContent = state.stroke.widthMin|0;
+    widthMaxVal.textContent = state.stroke.widthMax|0;
+    widthRangeVal.textContent = state.stroke.widthRange|0;
+    strokeAlphaVal.textContent = state.stroke.alpha.toFixed(2);
+    strokeDetailVal.textContent = state.stroke.detail.toFixed(2);
+
     sizeVal.textContent = state.brushSize|0;
     glowVal.textContent = state.glow|0;
     symVal.textContent = state.symmetry;
@@ -1195,9 +1214,14 @@ Copy this whole file into an .html and open on your phone.
     deadzoneVal.textContent = state.deadzone.toFixed(2);
     minDrawVal.textContent = state.minDrawSpeed.toFixed(2);
     filterVal.textContent = state.filterStrength.toFixed(2);
+    edgePadVal.textContent = state.edgePad|0;
+    heatControls.style.display = (state.colorMode === 'heat') ? 'block' : 'none';
+    strokeBlock.style.display = (state.brush === 'stroke') ? 'block' : 'none';
+    dotsBlock.style.display = (state.brush !== 'stroke') ? 'block' : 'none';
+    lockColor.classList.toggle('active', state.stroke.lockColor);
   }
 
-  // Shake-to-clear via accel magnitude threshold
+  // Shake-to-clear
   let lastShakeTime = 0;
   window.addEventListener('devicemotion', (e) => {
     if (!state.shakeClears) return;
@@ -1205,26 +1229,17 @@ Copy this whole file into an .html and open on your phone.
     const mag = Math.sqrt((ai.x||0)**2 + (ai.y||0)**2 + (ai.z||0)**2);
     if (mag > 22){
       const t = performance.now();
-      if (t - lastShakeTime > 800){
-        lastShakeTime = t;
-        paintBackground(true);
-        navigator.vibrate?.(50);
-      }
+      if (t - lastShakeTime > 800){ lastShakeTime = t; paintBackground(true); navigator.vibrate?.(50); }
     }
   }, { passive: true });
 
-  // Hide hint after first action
+  // Hint fade
   let hinted = false;
-  function hideHint(){
-    if (hinted) return;
-    hinted = true;
-    hint.style.opacity = '0';
-    setTimeout(()=> hint.style.display='none', 400);
-  }
+  function hideHint(){ if (hinted) return; hinted = true; hint.style.opacity = '0'; setTimeout(()=> hint.style.display='none', 400); }
   canvas.addEventListener('pointerdown', hideHint, { passive: true });
   sensorBtn.addEventListener('click', hideHint);
 
-  // Kickoff
+  // Start
   resize();
   syncLabels();
   paintBackground(true);
@@ -1234,26 +1249,10 @@ Copy this whole file into an .html and open on your phone.
   // Prevent iOS double-tap zoom
   let lastTouch = 0;
   document.addEventListener('touchend', function(e){
-    const t = Date.now();
-    if (t - lastTouch < 300) e.preventDefault();
-    lastTouch = t;
+    const t = Date.now(); if (t - lastTouch < 300) e.preventDefault(); lastTouch = t;
   }, {passive:false});
 
 })();
 </script>
 </body>
 </html>
-```
-
-What changed
-- Motion modes revamped:
-  - Motion (inertial): linear acceleration drives velocity with deadzone, friction, sensitivity.
-  - Motion + Gyro swirl: same as above, plus rotation-rate swirls velocity for wilder paths.
-  - Gyro orbit: rotation spins a brush around center; acceleration changes radius.
-  - Tilt (stable): no feedback loop; maps tilt directly to position with smooth damping.
-- Sensor options:
-  - Sensitivity, friction, deadzone, min draw speed, filter strength (LPF), bounds (wrap/bounce/clamp), linear-acc toggle, calibrate yaw/tilt, center brush, sensor draw toggle.
-- Teleport guard: large distance or long time gaps are treated as teleports (no stroke), eliminating random long lines.
-- General: still supports symmetry, kaleidoscope, turbulence (noise/curl), Auto agents, saving, hints, and quality scaling.
-
-If you want me to add a “record GIF” mode or a shader-based bloom/turbulence WebGL version, I can spin that up next.
