@@ -1,9 +1,14 @@
+Love the direction. I reworked sensors with a big focus on Motion drawing, added multiple sensor modes, stabilized tilt (no more feedback loop), fixed the random long lines by gating teleport segments, and added more controls (deadzone, friction, min-draw speed, filter strength, bounds, linear-acc toggle, calibrate, center). Motion modes now paint without touch as requested.
+
+Copy this whole file into an .html and open on your phone.
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>Psychedelic Sketch — Sensor Painter</title>
+<title>Psychedelic Sketch — Sensor Lab</title>
 <style>
   :root {
     --bg: #050508;
@@ -89,7 +94,7 @@
     position: fixed;
     left: 10px; right: 10px;
     top: calc(env(safe-area-inset-top, 8px) + 54px);
-    max-width: 940px;
+    max-width: 1100px;
     margin: 0 auto;
     background: var(--panel);
     border: 1px solid rgba(255,255,255,0.1);
@@ -182,7 +187,7 @@
 
   <div class="topbar">
     <button id="menuBtn" class="btn" aria-label="Settings"><span class="icon">⚙️</span> Settings</button>
-    <div class="chip" id="hint">tap + drag • or enable Sensors → Motion to draw by moving</div>
+    <div class="chip" id="hint">enable Sensors → Motion modes to draw by moving the phone</div>
     <div style="display:flex; gap:8px;">
       <button id="sensorBtn" class="btn" aria-label="Enable sensors"><span class="icon">📳</span> Sensors</button>
       <button id="saveBtn" class="btn" aria-label="Save"><span class="icon">📸</span></button>
@@ -252,17 +257,42 @@
         <label>Sensor mode
           <select id="sensorMode">
             <option value="off">Off</option>
-            <option value="orientation">Orientation (tilt draws)</option>
-            <option value="motion">Motion (move draws)</option>
+            <option value="tilt">Tilt (stable map)</option>
+            <option value="motion">Motion (inertial)</option>
+            <option value="motion-swirl">Motion + Gyro swirl</option>
+            <option value="gyro-orbit">Gyro orbit</option>
           </select>
         </label>
         <label>Sensor influence <span id="sensorInfVal"></span></label>
-        <input type="range" id="sensorInf" min="0" max="1" step="0.01" value="0.65" />
+        <input type="range" id="sensorInf" min="0" max="1" step="0.01" value="0.7" />
         <label>Motion sensitivity <span id="motionSensVal"></span></label>
         <input type="range" id="motionSens" min="0.2" max="3" step="0.05" value="1.2" />
+        <label>Friction <span id="frictionVal"></span></label>
+        <input type="range" id="friction" min="0.80" max="0.98" step="0.01" value="0.93" />
+        <label>Deadzone <span id="deadzoneVal"></span></label>
+        <input type="range" id="deadzone" min="0" max="0.3" step="0.01" value="0.06" />
+      </div>
+
+      <div class="control">
+        <label>Min draw speed <span id="minDrawVal"></span></label>
+        <input type="range" id="minDraw" min="0" max="0.5" step="0.01" value="0.08" />
+        <label>Filter strength <span id="filterVal"></span></label>
+        <input type="range" id="filter" min="0" max="0.95" step="0.01" value="0.7" />
+        <label>Bounds
+          <select id="boundsMode">
+            <option value="wrap" selected>Wrap</option>
+            <option value="bounce">Bounce</option>
+            <option value="clamp">Clamp</option>
+          </select>
+        </label>
         <div class="row">
+          <button id="useLinear" class="btn pill active">Linear Accel</button>
           <button id="shakeClear" class="btn pill">Shake clears</button>
-          <button id="sensorTrail" class="btn pill active">Sensor draws</button>
+          <button id="sensorDraw" class="btn pill active">Sensor draws</button>
+        </div>
+        <div class="row">
+          <button id="calibrate" class="btn pill">Calibrate</button>
+          <button id="center" class="btn pill">Center Brush</button>
         </div>
       </div>
 
@@ -295,7 +325,7 @@
     </div>
   </div>
 
-  <div class="legend" id="legend">Sensors: Orientation = tilt draws • Motion = move draws • Shake to clear</div>
+  <div class="legend" id="legend">Motion modes paint without touch • tweak sensitivity, deadzone, friction • calibrate if tilt feels off</div>
 
   <div class="bottombar">
     <button id="clearBtn" class="fab secondary">Clear</button>
@@ -315,6 +345,7 @@
 
   const state = {
     width: 0, height: 0, cx: 0, cy: 0,
+
     // drawing
     brush: 'soft', // 'soft'|'spray'
     brushSize: 30,
@@ -330,29 +361,45 @@
     fade: 0.035,
     composite: 'lighter',
     bgMode: 'dark',
+
     // turbulence
     turbMode: 'curl',
     turbInt: 0.65,
     turbScale: 0.009,
     turbSpeed: 0.6,
+
     // sensors
     sensorsEnabled: false,
-    sensorMode: 'off',          // 'off'|'orientation'|'motion'
-    sensorInf: 0.65,            // overall influence
-    motionSens: 1.2,            // acceleration sensitivity
+    sensorMode: 'off',                 // 'off'|'tilt'|'motion'|'motion-swirl'|'gyro-orbit'
+    sensorInf: 0.7,
+    motionSens: 1.2,
+    friction: 0.93,
+    deadzone: 0.06,
+    minDrawSpeed: 0.08,
+    filterStrength: 0.7,               // 0..0.95 low-pass factor
+    boundsMode: 'wrap',                 // 'wrap'|'bounce'|'clamp'
+    useLinear: true,
     shakeClears: false,
-    sensorDraws: true,          // when true, sensor paints without touch
-    tiltX: 0, tiltY: 0, yaw: 0, // orientation
-    accel: 0,                   // magnitude
-    ax: 0, ay: 0, az: 0,        // filtered accel components
-    rotMag: 0,                  // rotation rate magnitude
+    sensorDraws: true,
+
+    // orientation + accel
+    tiltX: 0, tiltY: 0, yaw: 0, yawBias: 0,
+    accelMag: 0,
+    ax: 0, ay: 0, az: 0,               // linear accel (filtered)
+    gx: 0, gy: 0, gz: 0,               // gravity estimate (LPF)
+    rot: { alpha: 0, beta: 0, gamma: 0 }, // deg/s
+    rotMag: 0,
+
     // sensor painter (virtual brush)
     sensor: { x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, inited: false },
-    // pointers (manual touch)
+
+    // input pointers
     pointers: new Map(),
+
     // auto
     auto: false,
     agents: [],
+
     // perf
     quality: 'balanced',
   };
@@ -362,7 +409,7 @@
   const lerp = (a,b,t)=>a+(b-a)*t;
   const smooth = t => t*t*(3-2*t);
 
-  // Noise
+  // Noise (3D value noise for wiggle/flow)
   function hash3(i,j,k){
     const s = Math.sin(i*127.1 + j*311.7 + k*74.7)*43758.5453123;
     return s - Math.floor(s);
@@ -385,18 +432,18 @@
     const nx11 = lerp(n011, n111, u);
     const nxy0 = lerp(nx00, nx10, v);
     const nxy1 = lerp(nx01, nx11, v);
-    return lerp(nxy0, nxy1, w); // 0..1
+    return lerp(nxy0, nxy1, w);
   }
 
-  // Turbulence flow vector
+  // Turbulence flow vector (noise/curl)
   function flowVec(x, y, t){
     if (state.turbMode === 'off') return { x: 0, y: 0 };
     const s = state.turbScale;
     const z = t * state.turbSpeed;
 
-    // Sensor tilt biases flow slightly
-    let biasX = state.tiltX * state.sensorInf * 0.7;
-    let biasY = -state.tiltY * state.sensorInf * 0.7;
+    // tilt bias for subtle control
+    const biasX = state.tiltX * state.sensorInf * 0.6;
+    const biasY = -state.tiltY * state.sensorInf * 0.6;
 
     let fx = 0, fy = 0;
     if (state.turbMode === 'noise'){
@@ -417,42 +464,21 @@
     fx = fx/mag + biasX;
     fy = fy/mag + biasY;
 
-    // motion bursts
-    const bump = clamp(state.accel*0.018, 0, 2) * state.sensorInf;
+    // motion burst
+    const bump = clamp(state.accelMag*0.015, 0, 2) * state.sensorInf;
     return { x: fx*(1 + bump), y: fy*(1 + bump) };
   }
 
-  // Colors
+  // Colors / Palettes
   function hsla(h,s,l,a=1){ return `hsla(${(h%360+360)%360},${s}%,${l}%,${a})`; }
   function getColor(name, t, x, y){
     const base = state.colorOffset + t;
     switch(name){
-      case 'Neon': {
-        const h = base + (x - state.cx)*0.05;
-        const l = 60 + Math.sin((y + t)*0.01)*10;
-        return hsla(h, 100, l);
-      }
-      case 'Sunset': {
-        const h = 10 + 30*Math.sin((t + x*0.3)*0.003) + 20*Math.sin((t + y*0.2)*0.002);
-        const s = 95;
-        const l = 55 + 10*Math.sin((t)*0.0012);
-        return hsla(h, s, l);
-      }
-      case 'Ocean': {
-        const h = 190 + 40*Math.sin((x+y+t)*0.002);
-        const s = 90;
-        const l = 50 + 10*Math.sin((t + x)*0.001);
-        return hsla(h, s, l);
-      }
-      case 'Acid': {
-        const h = base*1.1 + 180*Math.sin((x*0.02)+(t*0.003));
-        return hsla(h, 100, 60);
-      }
-      case 'Rainbow':
-      default: {
-        const h = base + 0.06*(x - state.cx) + 0.04*(y - state.cy);
-        return hsla(h, 100, 58);
-      }
+      case 'Neon':   return hsla(base + (x - state.cx)*0.05, 100, 60 + 10*Math.sin((y + t)*0.01));
+      case 'Sunset': return hsla(10 + 30*Math.sin((t + x*0.3)*0.003) + 20*Math.sin((t + y*0.2)*0.002), 95, 55 + 10*Math.sin(t*0.0012));
+      case 'Ocean':  return hsla(190 + 40*Math.sin((x+y+t)*0.002), 90, 50 + 10*Math.sin((t + x)*0.001));
+      case 'Acid':   return hsla(base*1.1 + 180*Math.sin((x*0.02)+(t*0.003)), 100, 60);
+      default:       return hsla(base + 0.06*(x - state.cx) + 0.04*(y - state.cy), 100, 58);
     }
   }
 
@@ -474,7 +500,7 @@
     state.cx = w/2; state.cy = h/2;
     paintBackground(true);
 
-    // reset sensor painter center
+    // re-center sensor painter if not inited
     if (!state.sensor.inited) {
       state.sensor.x = state.cx; state.sensor.y = state.cy;
       state.sensor.lastX = state.cx; state.sensor.lastY = state.cy;
@@ -521,7 +547,7 @@
     const prev = state.pointers.get(e.pointerId);
     if (!prev) return;
     const now = { x: e.clientX, y: e.clientY, t: performance.now(), pressure: e.pressure ?? 0.6 };
-    drawSymmetricSegment(prev, now);
+    safeSymmetricSegment(prev, now);
     state.pointers.set(e.pointerId, now);
   }
   function onUp(e){
@@ -552,15 +578,29 @@
     return { x: state.cx + rx, y: state.cy + ry };
   }
 
+  // Teleport/long-segment guard to prevent random long lines
+  function safeSymmetricSegment(a, b){
+    const dt = Math.abs((b.t||0) - (a.t||0)) || 0;
+    const dist = Math.hypot((b.x-a.x), (b.y-a.y));
+    const MAX_SEG = Math.min(state.width, state.height) * 0.35;
+    if (dt > 180 || dist > MAX_SEG){
+      // treat as teleport; update last but don't draw
+      return;
+    }
+    drawSymmetricSegment(a, b);
+  }
+
   function drawSymmetricSegment(a, b){
     const slices = Math.max(1, Math.floor(state.symmetry));
     const angleStep = (Math.PI*2) / slices;
     const rotOff = state.rotOffset;
+
     for (let i=0; i<slices; i++){
       const ang = i * angleStep + rotOff;
       const ra = rotateAround(a.x, a.y, state.cx, state.cy, ang);
       const rb = rotateAround(b.x, b.y, state.cx, state.cy, ang);
       drawOrganicSegment(ra, rb);
+
       if (state.kaleido){
         const ka = reflectAcrossAxis(ra, ang);
         const kb = reflectAcrossAxis(rb, ang);
@@ -613,9 +653,9 @@
       y += ny * wiggle;
 
       const pressure = state.pointers.size ? [...state.pointers.values()][0]?.pressure || 0.7 : 0.7;
-      const accelBoost = (state.accel * 0.04) * state.sensorInf;
+      const accelBoost = (state.accelMag * 0.03) * state.sensorInf;
       const size = Math.max(1, state.brushSize * (0.6 + 0.4*Math.abs(nval)) * (0.85 + accelBoost) * (0.6 + 0.7*pressure));
-      const hueShift = dist * state.colorSpeed * 0.3 + i * state.colorSpeed * 1.1 + (state.yaw*15*state.sensorInf);
+      const hueShift = dist * state.colorSpeed * 0.3 + i * state.colorSpeed * 1.1 + ((state.yaw - state.yawBias)*15*state.sensorInf);
       const col = getColor(state.palette, state.colorOffset + hueShift, x, y);
 
       ctx.shadowColor = col;
@@ -675,30 +715,44 @@
       const f = flowVec(a.x, a.y, t*0.001);
       a.vx = (a.vx + f.x * 0.7)*0.96;
       a.vy = (a.vy + f.y * 0.7)*0.96;
-      const old = { x: a.x, y: a.y };
+      const old = { x: a.x, y: a.y, t: t - dt };
       a.x += a.vx * sp * dt*0.06;
       a.y += a.vy * sp * dt*0.06;
-      wrap(a);
-      drawSymmetricSegment(old, {x:a.x, y:a.y, t:t});
+      bound(a);
+      safeSymmetricSegment(old, {x:a.x, y:a.y, t:t});
     }
   }
 
-  // Sensor painter: draws without touch when Sensor mode on
+  // Bounds helpers
+  function bound(p){
+    const m = state.boundsMode;
+    if (m === 'wrap'){
+      if (p.x < -20) p.x = state.width+20;
+      if (p.x > state.width+20) p.x = -20;
+      if (p.y < -20) p.y = state.height+20;
+      if (p.y > state.height+20) p.y = -20;
+    } else if (m === 'bounce'){
+      if (p.x < 0){ p.x = 0; p.vx = -p.vx*0.9; }
+      if (p.x > state.width){ p.x = state.width; p.vx = -p.vx*0.9; }
+      if (p.y < 0){ p.y = 0; p.vy = -p.vy*0.9; }
+      if (p.y > state.height){ p.y = state.height; p.vy = -p.vy*0.9; }
+    } else { // clamp
+      p.x = clamp(p.x, 0, state.width);
+      p.y = clamp(p.y, 0, state.height);
+    }
+  }
+
+  // Sensor painter (draws without touch when sensor modes enabled)
   function getScreenAngleRad(){
     const o = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
     return (o % 360) * Math.PI/180;
   }
-  function wrap(p){
-    if (p.x < -20) p.x = state.width+20;
-    if (p.x > state.width+20) p.x = -20;
-    if (p.y < -20) p.y = state.height+20;
-    if (p.y > state.height+20) p.y = -20;
-  }
+
   function updateSensorPainter(dt){
     if (!state.sensorsEnabled || state.sensorMode === 'off' || !state.sensorDraws) return;
+
     const now = performance.now();
     const p = state.sensor;
-
     if (!p.inited){
       p.x = state.cx; p.y = state.cy;
       p.lastX = p.x; p.lastY = p.y;
@@ -706,53 +760,96 @@
       p.inited = true;
     }
 
-    const dtSec = dt * 0.001;
-    const ang = -getScreenAngleRad(); // rotate device axes to screen coords (roughly)
+    const dtSec = Math.max(0.001, dt * 0.001);
+    const rotZ = state.rot.alpha || 0; // yaw-like rotation rate (deg/s)
+    const ang = -getScreenAngleRad();
 
-    if (state.sensorMode === 'orientation'){
-      // tilt steers toward a target
+    if (state.sensorMode === 'tilt'){
+      // Stable tilt mapping (no velocity feedback)
       const reach = 0.46; // fraction of screen
       const tx = state.cx + (state.tiltX * state.width * reach);
       const ty = state.cy + (state.tiltY * state.height * reach);
-      const steer = (0.9 + state.sensorInf*1.6) * (0.016/Math.max(0.008, dtSec));
-      p.vx += (tx - p.x) * steer * dtSec;
-      p.vy += (ty - p.y) * steer * dtSec;
-      // add flow for organic path
+      // critically-damped smoothing toward target
+      const smoothing = 1 - Math.pow(1 - (0.22 + state.sensorInf*0.5), dtSec*60);
+      p.x = lerp(p.x, tx, smoothing);
+      p.y = lerp(p.y, ty, smoothing);
+      // small swirl from flow to keep organic
       const f = flowVec(p.x, p.y, now*0.001);
-      p.vx += f.x * state.turbInt * 20 * dtSec;
-      p.vy += f.y * state.turbInt * 20 * dtSec;
-      // friction
-      p.vx *= 0.92; p.vy *= 0.92;
-    } else if (state.sensorMode === 'motion'){
-      // Use acceleration to push the brush; rotate to screen coords
-      // Filtered accel
-      const ax = state.ax, ay = state.ay;
+      p.x += f.x * state.turbInt * 8 * dtSec;
+      p.y += f.y * state.turbInt * 8 * dtSec;
+    } else if (state.sensorMode === 'motion' || state.sensorMode === 'motion-swirl'){
+      // Acceleration-driven velocity
+      // choose linear acceleration for stability
+      let ax = state.ax, ay = state.ay;
+      // rotate device axes to screen coords
       const rx = ax * Math.cos(ang) - ay * Math.sin(ang);
       const ry = ax * Math.sin(ang) + ay * Math.cos(ang);
-      const k = 45 * state.motionSens * (0.5 + state.sensorInf); // push gain
-      p.vx += rx * k * dtSec;
-      p.vy += ry * k * dtSec;
+      const mag = Math.hypot(rx, ry);
+      const dz = state.deadzone;
+      const gain = 45 * state.motionSens * (0.5 + state.sensorInf);
 
-      // add swirl flow + rotation burst
+      const driveX = (mag > dz ? (rx / (mag || 1)) * (mag - dz) : 0) * gain;
+      const driveY = (mag > dz ? (ry / (mag || 1)) * (mag - dz) : 0) * gain;
+
+      p.vx += driveX * dtSec;
+      p.vy += driveY * dtSec;
+
+      // Flow + optional gyro swirl
       const f = flowVec(p.x, p.y, now*0.001);
-      const rotBoost = clamp(state.rotMag/360, 0, 2); // deg/s -> 0..~2
-      p.vx += f.x * state.turbInt * (18 + rotBoost*12) * dtSec;
-      p.vy += f.y * state.turbInt * (18 + rotBoost*12) * dtSec;
+      let swirl = 0;
+      if (state.sensorMode === 'motion-swirl'){
+        swirl = clamp(rotZ/180, -2, 2) * state.sensorInf; // convert deg/s to a small factor
+      }
+      // apply flow
+      p.vx += f.x * state.turbInt * (16 + Math.abs(swirl)*10) * dtSec;
+      p.vy += f.y * state.turbInt * (16 + Math.abs(swirl)*10) * dtSec;
+      // apply swirl by rotating velocity vector
+      if (swirl !== 0){
+        const s = Math.sin(swirl * dtSec), c = Math.cos(swirl * dtSec);
+        const vx = p.vx*c - p.vy*s;
+        const vy = p.vx*s + p.vy*c;
+        p.vx = vx; p.vy = vy;
+      }
 
       // friction
-      p.vx *= 0.93; p.vy *= 0.93;
+      p.vx *= state.friction;
+      p.vy *= state.friction;
+
+      // move
+      p.x += p.vx;
+      p.y += p.vy;
+
+      bound(p);
+    } else if (state.sensorMode === 'gyro-orbit'){
+      // Orbit center; rotation rate controls angular speed; acceleration controls radius
+      const angleSpeed = (rotZ/180) * (0.8 + state.sensorInf*1.6); // rev/sec-ish scaled
+      // radius target from acceleration magnitude
+      const rMax = Math.min(state.width, state.height)*0.38;
+      const rTarget = clamp((state.accelMag - 3)/7, 0, 1) * rMax; // ~3..10 m/s^2
+      p._orbitR = lerp(p._orbitR || (rMax*0.25), rTarget, 1 - Math.pow(1-0.25, dtSec*60));
+      p._orbitA = (p._orbitA || 0) + angleSpeed * dtSec * Math.PI*2;
+      const tx = state.cx + Math.cos(p._orbitA)*p._orbitR;
+      const ty = state.cy + Math.sin(p._orbitA)*p._orbitR;
+      const smoothing = 1 - Math.pow(1 - 0.28, dtSec*60);
+      p.x = lerp(p.x, tx, smoothing);
+      p.y = lerp(p.y, ty, smoothing);
     }
 
-    // Move and wrap
-    const old = { x: p.x, y: p.y, t: now };
-    p.x += p.vx;
-    p.y += p.vy;
-    wrap(p);
-
+    // Compute speed for gating
+    const speed = Math.hypot(p.x - p.lastX, p.y - p.lastY) / Math.max(1, dt);
     // Draw if moving enough
-    const speed = Math.hypot(p.vx, p.vy);
-    if (speed > 0.05){
-      drawSymmetricSegment({x:p.lastX, y:p.lastY, t: now-dt}, {x:p.x, y:p.y, t: now});
+    if (speed > state.minDrawSpeed){
+      const old = { x: p.lastX, y: p.lastY, t: now - dt };
+      const cur = { x: p.x, y: p.y, t: now };
+      // teleport guard here too
+      const dist = Math.hypot(cur.x-old.x, cur.y-old.y);
+      const MAX_SEG = Math.min(state.width, state.height) * 0.35;
+      if (dist <= MAX_SEG){
+        drawSymmetricSegment(old, cur);
+      }
+      p.lastX = p.x; p.lastY = p.y;
+    } else {
+      // update without drawing
       p.lastX = p.x; p.lastY = p.y;
     }
   }
@@ -761,7 +858,9 @@
   let lastFrame = performance.now();
   function tick(){
     const now = performance.now();
-    const dt = Math.min(100, now - lastFrame);
+    let dt = now - lastFrame;
+    // Clamp dt to avoid huge teleports after tab switch
+    if (dt > 120) dt = 16;
     lastFrame = now;
 
     // trail fade
@@ -780,8 +879,8 @@
       ctx.restore();
     }
 
-    // symmetry yaw rotation
-    state.rotOffset = state.yaw * 0.15 * state.sensorInf;
+    // symmetry yaw rotation (use calibrated yawBias)
+    state.rotOffset = (state.yaw - state.yawBias) * 0.15 * state.sensorInf;
 
     // sensor painter
     updateSensorPainter(dt);
@@ -822,37 +921,53 @@
       motionListenerAdded = true;
     }
   }
+
+  // Orientation (tilt)
   function onOrientation(e){
     if (!state.sensorsEnabled) return;
     const beta = e.beta ?? 0;   // x tilt (-180,180)
     const gamma = e.gamma ?? 0; // y tilt (-90,90)
     const alpha = e.alpha ?? 0; // yaw
+    // Normalize to -1..1
     state.tiltX = clamp(gamma/45, -1, 1);
     state.tiltY = clamp(beta/45, -1, 1);
-    state.yaw = (alpha/180 - 1);
+    state.yaw = alpha/180 - 1;
   }
-  // simple low-pass filter for acceleration
-  const accLP = { x:0, y:0, z:0 };
+
+  // Motion (accel + rotation)
+  const lp = { ax:0, ay:0, az:0, gx:0, gy:0, gz:0 }; // low-pass states
   function onMotion(e){
     if (!state.sensorsEnabled) return;
-    const a = e.acceleration ?? e.accelerationIncludingGravity ?? {x:0,y:0,z:0};
+    const inc = e.accelerationIncludingGravity || {x:0,y:0,z:0};
+    const lin = e.acceleration || null; // often null on iOS
     const r = e.rotationRate || { alpha:0, beta:0, gamma:0 };
-    // low-pass to tame noise
-    const alphaLP = 0.7;
-    accLP.x = alphaLP*accLP.x + (1-alphaLP)*(a.x || 0);
-    accLP.y = alphaLP*accLP.y + (1-alphaLP)*(a.y || 0);
-    accLP.z = alphaLP*accLP.z + (1-alphaLP)*(a.z || 0);
-    state.ax = accLP.x;
-    state.ay = accLP.y;
-    state.az = accLP.z;
 
-    // magnitude (including gravity is fine as an activity signal)
+    // Low-pass gravity estimate from including-gravity accel
+    const a = clamp(state.filterStrength, 0, 0.95);
+    lp.gx = a*lp.gx + (1-a)*(inc.x || 0);
+    lp.gy = a*lp.gy + (1-a)*(inc.y || 0);
+    lp.gz = a*lp.gz + (1-a)*(inc.z || 0);
+
+    // Linear acceleration: prefer OS-provided, else subtract gravity estimate
+    const lax = (lin && isFinite(lin.x)) ? lin.x : (inc.x - lp.gx);
+    const lay = (lin && isFinite(lin.y)) ? lin.y : (inc.y - lp.gy);
+    const laz = (lin && isFinite(lin.z)) ? lin.z : (inc.z - lp.gz);
+
+    // Low-pass linear accel for stability
+    lp.ax = a*lp.ax + (1-a)*(lax);
+    lp.ay = a*lp.ay + (1-a)*(lay);
+    lp.az = a*lp.az + (1-a)*(laz);
+
+    // Choose data: linear (preferred) or including gravity if toggle off
+    const useLin = state.useLinear;
+    state.ax = useLin ? lp.ax : lp.gx;
+    state.ay = useLin ? lp.ay : lp.gy;
+    state.az = useLin ? lp.az : lp.gz;
+
     const ai = e.accelerationIncludingGravity || {x:0,y:0,z:0};
-    const mag = Math.sqrt((ai.x||0)**2 + (ai.y||0)**2 + (ai.z||0)**2);
-    state.accel = mag;
-
-    const rotM = Math.sqrt((r.alpha||0)**2 + (r.beta||0)**2 + (r.gamma||0)**2);
-    state.rotMag = rotM;
+    state.accelMag = Math.sqrt((ai.x||0)**2 + (ai.y||0)**2 + (ai.z||0)**2);
+    state.rot = { alpha: r.alpha||0, beta: r.beta||0, gamma: r.gamma||0 };
+    state.rotMag = Math.sqrt((state.rot.alpha)**2 + (state.rot.beta)**2 + (state.rot.gamma)**2);
   }
 
   // Controls/UI
@@ -893,8 +1008,20 @@
   const sensorInfVal = document.getElementById('sensorInfVal');
   const motionSens = document.getElementById('motionSens');
   const motionSensVal = document.getElementById('motionSensVal');
+  const friction = document.getElementById('friction');
+  const frictionVal = document.getElementById('frictionVal');
+  const deadzone = document.getElementById('deadzone');
+  const deadzoneVal = document.getElementById('deadzoneVal');
+  const minDraw = document.getElementById('minDraw');
+  const minDrawVal = document.getElementById('minDrawVal');
+  const filter = document.getElementById('filter');
+  const filterVal = document.getElementById('filterVal');
+  const boundsMode = document.getElementById('boundsMode');
+  const useLinear = document.getElementById('useLinear');
   const shakeClear = document.getElementById('shakeClear');
-  const sensorTrail = document.getElementById('sensorTrail');
+  const sensorDraw = document.getElementById('sensorDraw');
+  const calibrate = document.getElementById('calibrate');
+  const center = document.getElementById('center');
 
   const bgMode = document.getElementById('bgMode');
   const composite = document.getElementById('composite');
@@ -974,13 +1101,31 @@
   });
   sensorInf.addEventListener('input', e => { state.sensorInf = +e.target.value; sensorInfVal.textContent = state.sensorInf.toFixed(2); });
   motionSens.addEventListener('input', e => { state.motionSens = +e.target.value; motionSensVal.textContent = state.motionSens.toFixed(2); });
+  friction.addEventListener('input', e => { state.friction = +e.target.value; frictionVal.textContent = state.friction.toFixed(2); });
+  deadzone.addEventListener('input', e => { state.deadzone = +e.target.value; deadzoneVal.textContent = state.deadzone.toFixed(2); });
+  minDraw.addEventListener('input', e => { state.minDrawSpeed = +e.target.value; minDrawVal.textContent = state.minDrawSpeed.toFixed(2); });
+  filter.addEventListener('input', e => { state.filterStrength = +e.target.value; filterVal.textContent = state.filterStrength.toFixed(2); });
+  boundsMode.addEventListener('change', e => state.boundsMode = e.target.value);
+  useLinear.addEventListener('click', () => {
+    state.useLinear = !state.useLinear;
+    useLinear.classList.toggle('active', state.useLinear);
+  });
   shakeClear.addEventListener('click', () => {
     state.shakeClears = !state.shakeClears;
     shakeClear.classList.toggle('active', state.shakeClears);
   });
-  sensorTrail.addEventListener('click', () => {
+  sensorDraw.addEventListener('click', () => {
     state.sensorDraws = !state.sensorDraws;
-    sensorTrail.classList.toggle('active', state.sensorDraws);
+    sensorDraw.classList.toggle('active', state.sensorDraws);
+  });
+  calibrate.addEventListener('click', () => {
+    state.yawBias = state.yaw;
+    // also zero tilt baseline
+    state._tiltBiasX = state.tiltX;
+    state._tiltBiasY = state.tiltY;
+  });
+  center.addEventListener('click', () => {
+    state.sensor.inited = false;
   });
 
   bgMode.addEventListener('change', e => { state.bgMode = e.target.value; paintBackground(true); });
@@ -1046,9 +1191,29 @@
     turbSpeedVal.textContent = state.turbSpeed.toFixed(2);
     sensorInfVal.textContent = state.sensorInf.toFixed(2);
     motionSensVal.textContent = state.motionSens.toFixed(2);
+    frictionVal.textContent = state.friction.toFixed(2);
+    deadzoneVal.textContent = state.deadzone.toFixed(2);
+    minDrawVal.textContent = state.minDrawSpeed.toFixed(2);
+    filterVal.textContent = state.filterStrength.toFixed(2);
   }
 
-  // Hint fade on first interaction (touch or enabling sensors)
+  // Shake-to-clear via accel magnitude threshold
+  let lastShakeTime = 0;
+  window.addEventListener('devicemotion', (e) => {
+    if (!state.shakeClears) return;
+    const ai = e.accelerationIncludingGravity || {x:0,y:0,z:0};
+    const mag = Math.sqrt((ai.x||0)**2 + (ai.y||0)**2 + (ai.z||0)**2);
+    if (mag > 22){
+      const t = performance.now();
+      if (t - lastShakeTime > 800){
+        lastShakeTime = t;
+        paintBackground(true);
+        navigator.vibrate?.(50);
+      }
+    }
+  }, { passive: true });
+
+  // Hide hint after first action
   let hinted = false;
   function hideHint(){
     if (hinted) return;
@@ -1078,3 +1243,17 @@
 </script>
 </body>
 </html>
+```
+
+What changed
+- Motion modes revamped:
+  - Motion (inertial): linear acceleration drives velocity with deadzone, friction, sensitivity.
+  - Motion + Gyro swirl: same as above, plus rotation-rate swirls velocity for wilder paths.
+  - Gyro orbit: rotation spins a brush around center; acceleration changes radius.
+  - Tilt (stable): no feedback loop; maps tilt directly to position with smooth damping.
+- Sensor options:
+  - Sensitivity, friction, deadzone, min draw speed, filter strength (LPF), bounds (wrap/bounce/clamp), linear-acc toggle, calibrate yaw/tilt, center brush, sensor draw toggle.
+- Teleport guard: large distance or long time gaps are treated as teleports (no stroke), eliminating random long lines.
+- General: still supports symmetry, kaleidoscope, turbulence (noise/curl), Auto agents, saving, hints, and quality scaling.
+
+If you want me to add a “record GIF” mode or a shader-based bloom/turbulence WebGL version, I can spin that up next.
