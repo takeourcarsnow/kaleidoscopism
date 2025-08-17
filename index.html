@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>Psychedelic Sketch — Solid Stroke Edition</title>
+<title>Psychedelic Sketch — Solid Stroke + Center Bounds</title>
 <style>
   :root {
     --bg: #050508;
@@ -93,7 +93,7 @@
 
   <div class="topbar">
     <button id="menuBtn" class="btn" aria-label="Settings"><span class="icon">⚙️</span> Settings</button>
-    <div class="chip" id="hint">Sensors → Motion to draw by moving • Brush: Stroke for solid lines</div>
+    <div class="chip" id="hint">Sensors → Motion to draw by moving • Try Circle/Rect bounds</div>
     <div style="display:flex; gap:8px;">
       <button id="sensorBtn" class="btn" aria-label="Enable sensors"><span class="icon">📳</span> Sensors</button>
       <button id="saveBtn" class="btn" aria-label="Save"><span class="icon">📸</span></button>
@@ -157,8 +157,8 @@
           <input type="range" id="widthMin" min="1" max="40" step="1" value="2" />
           <label>Max width <span id="widthMaxVal"></span></label>
           <input type="range" id="widthMax" min="2" max="80" step="1" value="18" />
-          <label id="widthRangeLabel">Width range (px/s) <span id="widthRangeVal"></span></label>
-          <input type="range" id="widthRange" min="100" max="3000" step="10" value="1200" />
+          <label id="widthRangeLabel" style="display:none;">Width range (px/s) <span id="widthRangeVal"></span></label>
+          <input type="range" id="widthRange" min="100" max="3000" step="10" value="1200" style="display:none;" />
           <label>Stroke opacity <span id="strokeAlphaVal"></span></label>
           <input type="range" id="strokeAlpha" min="0.2" max="1" step="0.01" value="0.95" />
           <label>Stroke detail <span id="strokeDetailVal"></span></label>
@@ -245,19 +245,33 @@
         <input type="range" id="minDraw" min="0" max="0.5" step="0.01" value="0.08" />
         <label>Filter strength <span id="filterVal"></span></label>
         <input type="range" id="filter" min="0" max="0.95" step="0.01" value="0.7" />
-        <label>Bounds
-          <select id="boundsMode">
+        <label>Region
+          <select id="boundsRegion">
+            <option value="screen" selected>Screen</option>
+            <option value="circle">Circle (center)</option>
+            <option value="rect">Rect (center)</option>
+          </select>
+        </label>
+        <label>Behavior
+          <select id="boundsBehavior">
             <option value="wrap">Wrap</option>
             <option value="bounce" selected>Bounce</option>
             <option value="clamp">Clamp</option>
           </select>
         </label>
+        <label>Circle radius (%) <span id="circleRadiusVal"></span></label>
+        <input type="range" id="circleRadius" min="20" max="100" step="1" value="68" />
+        <label>Rect width (%) <span id="rectWVal"></span></label>
+        <input type="range" id="rectW" min="20" max="100" step="1" value="72" />
+        <label>Rect height (%) <span id="rectHVal"></span></label>
+        <input type="range" id="rectH" min="20" max="100" step="1" value="60" />
         <label>Edge padding <span id="edgePadVal"></span></label>
         <input type="range" id="edgePad" min="0" max="40" step="1" value="0" />
         <div class="row">
           <button id="useLinear" class="btn pill active">Linear Accel</button>
           <button id="shakeClear" class="btn pill">Shake clears</button>
           <button id="sensorDraw" class="btn pill active">Sensor draws</button>
+          <button id="showBounds" class="btn pill">Show bounds</button>
         </div>
         <div class="row">
           <button id="calibrate" class="btn pill">Calibrate</button>
@@ -294,7 +308,7 @@
     </div>
   </div>
 
-  <div class="legend" id="legend">Solid strokes by default • Switch to Dots/Spray if you want particles • Motion modes paint hands-free</div>
+  <div class="legend" id="legend">Solid strokes • Center bounds: circle/rect with wrap/bounce/clamp • Motion modes paint hands-free</div>
 
   <div class="bottombar">
     <button id="clearBtn" class="fab secondary">Clear</button>
@@ -317,15 +331,15 @@
 
     // brush/stroke
     brush: 'stroke', // 'stroke'|'dots'|'spray'
-    brushSize: 30,   // for dots/spray
-    glow: 0,         // default off
+    brushSize: 30,
+    glow: 0,
     stroke: {
       widthMode: 'constant', // 'constant'|'speed'
       widthMin: 2,
       widthMax: 18,
-      widthRange: 1200, // px/s where width -> min
+      widthRange: 1200, // px/s where width ~ min
       alpha: 0.95,
-      detail: 1.4, // >1 = more points per segment (smoother)
+      detail: 1.4,
       cap: 'round',
       join: 'round',
       lockColor: false,
@@ -340,7 +354,7 @@
     // color
     palette: 'Rainbow',
     colorMode: 'palette', // 'palette'|'velocity'|'accel'|'spin'|'direction'|'heat'
-    metricRange: 180,     // range for velocity/accel/spin
+    metricRange: 180,
     colorSpeed: 0.48,
     colorOffset: Math.random()*360,
     heat: 0, heatGain: 0.6, heatDecay: 0.14, sensorSpeed: 0,
@@ -366,8 +380,16 @@
     deadzone: 0.06,
     minDrawSpeed: 0.08,
     filterStrength: 0.7,
-    boundsMode: 'bounce',
+
+    // bounds
+    boundsRegion: 'screen',         // 'screen'|'circle'|'rect'
+    boundsBehavior: 'bounce',       // 'wrap'|'bounce'|'clamp'
+    circleRadiusPct: 68,            // % of half-min(side)
+    rectWpct: 72,                   // % of screen width
+    rectHpct: 60,                   // % of screen height
     edgePad: 0,
+    showBounds: false,
+
     useLinear: true,
     shakeClears: false,
     sensorDraws: true,
@@ -614,7 +636,7 @@
     else drawDottySegment(a, b, dt, dist, state.brush); // 'dots' or 'spray'
   }
 
-  // Solid stroke segment (polyline with turbulence warp)
+  // Solid stroke segment
   function drawStrokeSegment(a, b, dt=16, preDist=null){
     const dx = b.x - a.x, dy = b.y - a.y;
     const dist = preDist ?? Math.hypot(dx, dy);
@@ -634,7 +656,6 @@
     }
     w = clamp(w, 1, 200);
 
-    // configure context once
     ctx.save();
     ctx.globalCompositeOperation = state.composite;
     ctx.lineCap = state.stroke.cap;
@@ -644,54 +665,68 @@
     ctx.globalAlpha = state.stroke.alpha;
     ctx.shadowBlur = state.glow || 0;
 
-    // segment subdivision for warping
-    const baseStep = 6 / state.stroke.detail; // base pixels between samples
+    const baseStep = 6 / state.stroke.detail; // px per sample
     const steps = Math.max(1, Math.ceil(dist / Math.max(1, baseStep)));
     let x0 = a.x, y0 = a.y;
 
-    // precompute start color if locking
-    let lockedColor = null;
+    // Precompute locked color path if enabled (one stroke call)
     if (state.stroke.lockColor){
-      lockedColor = getStrokeColor(a.x, a.y, segSpeed, segDir, tNow, 0, dist);
-    }
-
-    // walk points and draw mini-segments to keep color dynamic if desired
-    for (let i=1; i<=steps; i++){
-      const f = i/steps;
-      let x = lerp(a.x, b.x, f);
-      let y = lerp(a.y, b.y, f);
-
-      // turbulence warp along the path
-      if (state.turbMode !== 'off' && state.turbInt > 0){
-        const fv = flowVec(x, y, tNow*0.001);
-        const warp = state.turbInt * (0.7 + 0.6*Math.abs(Math.sin((tNow*0.002)+(i*0.25))));
-        x += fv.x * warp * 6;
-        y += fv.y * warp * 6;
-      }
-
-      // subtle wiggle normal to the segment
-      const nval = (noise3(x*0.015, y*0.015, tNow*0.001) - 0.5) * 2;
-      const nx = -dy / dist, ny = dx / dist;
-      const tiltW = (state.tiltX + state.tiltY)*0.5;
-      const wiggle = (state.scatter*8 + w*0.05) * (nval + tiltW*state.sensorInf*0.4);
-      x += nx * wiggle; y += ny * wiggle;
-
-      const col = lockedColor || getStrokeColor(x, y, segSpeed, segDir, tNow, i, dist);
-      ctx.strokeStyle = col;
-      if (state.glow > 0) ctx.shadowColor = col;
-
+      const lockedColor = getStrokeColor(a.x, a.y, segSpeed, segDir, tNow, 0, dist);
+      ctx.strokeStyle = lockedColor;
+      if (state.glow > 0) ctx.shadowColor = lockedColor;
       ctx.beginPath();
       ctx.moveTo(x0, y0);
-      ctx.lineTo(x, y);
+      for (let i=1; i<=steps; i++){
+        const f = i/steps;
+        let x = lerp(a.x, b.x, f);
+        let y = lerp(a.y, b.y, f);
+        if (state.turbMode !== 'off' && state.turbInt > 0){
+          const fv = flowVec(x, y, tNow*0.001);
+          const warp = state.turbInt * (0.7 + 0.6*Math.abs(Math.sin((tNow*0.002)+(i*0.25))));
+          x += fv.x * warp * 6; y += fv.y * warp * 6;
+        }
+        const nval = (noise3(x*0.015, y*0.015, tNow*0.001) - 0.5) * 2;
+        const nx = -dy / dist, ny = dx / dist;
+        const tiltW = (state.tiltX + state.tiltY)*0.5;
+        const wiggle = (state.scatter*8 + w*0.05) * (nval + tiltW*state.sensorInf*0.4);
+        x += nx * wiggle; y += ny * wiggle;
+        ctx.lineTo(x, y);
+      }
       ctx.stroke();
+    } else {
+      // Dynamic color per mini segment
+      for (let i=1; i<=steps; i++){
+        const f = i/steps;
+        let x = lerp(a.x, b.x, f);
+        let y = lerp(a.y, b.y, f);
+        if (state.turbMode !== 'off' && state.turbInt > 0){
+          const fv = flowVec(x, y, tNow*0.001);
+          const warp = state.turbInt * (0.7 + 0.6*Math.abs(Math.sin((tNow*0.002)+(i*0.25))));
+          x += fv.x * warp * 6; y += fv.y * warp * 6;
+        }
+        const nval = (noise3(x*0.015, y*0.015, tNow*0.001) - 0.5) * 2;
+        const nx = -dy / dist, ny = dx / dist;
+        const tiltW = (state.tiltX + state.tiltY)*0.5;
+        const wiggle = (state.scatter*8 + w*0.05) * (nval + tiltW*state.sensorInf*0.4);
+        x += nx * wiggle; y += ny * wiggle;
 
-      x0 = x; y0 = y;
+        const col = getStrokeColor(x, y, segSpeed, segDir, tNow, i, dist);
+        ctx.strokeStyle = col;
+        if (state.glow > 0) ctx.shadowColor = col;
+
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+        x0 = x; y0 = y;
+      }
     }
 
     ctx.restore();
   }
 
-  // Dots/Spray (legacy, optional look)
+  // Dots/Spray
   function drawDottySegment(a, b, dt=16, preDist=null, mode='dots'){
     const dx = b.x - a.x, dy = b.y - a.y;
     const dist = preDist ?? Math.hypot(dx, dy);
@@ -704,8 +739,6 @@
 
     ctx.save();
     ctx.globalCompositeOperation = state.composite;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
     ctx.shadowBlur = state.glow || 0;
     ctx.globalAlpha = 0.95;
 
@@ -734,8 +767,8 @@
       const segDir = Math.atan2(dy, dx);
       const col = getStrokeColor(x, y, segSpeed, segDir, tNow, i, dist);
 
-      ctx.shadowColor = col;
       ctx.fillStyle = col;
+      if (state.glow > 0) ctx.shadowColor = col;
 
       if (mode === 'dots'){
         ctx.beginPath(); ctx.arc(x, y, size*0.5, 0, Math.PI*2); ctx.fill();
@@ -780,21 +813,106 @@
   function bound(p){
     const pad = state.edgePad;
     const w = state.width, h = state.height;
-    const m = state.boundsMode;
-    if (m === 'wrap'){
-      if (p.x < 0 - pad) { p.x = w + pad; }
-      if (p.x > w + pad) { p.x = 0 - pad; }
-      if (p.y < 0 - pad) { p.y = h + pad; }
-      if (p.y > h + pad) { p.y = 0 - pad; }
-    } else if (m === 'bounce'){
-      if (p.x < 0 + pad){ p.x = 0 + pad; p.vx = -p.vx*0.9; }
-      if (p.x > w - pad){ p.x = w - pad; p.vx = -p.vx*0.9; }
-      if (p.y < 0 + pad){ p.y = 0 + pad; p.vy = -p.vy*0.9; }
-      if (p.y > h - pad){ p.y = h - pad; p.vy = -p.vy*0.9; }
-    } else {
-      p.x = clamp(p.x, 0 + pad, w - pad);
-      p.y = clamp(p.y, 0 + pad, h - pad);
+    const cx = state.cx, cy = state.cy;
+    const behavior = state.boundsBehavior;
+    const region = state.boundsRegion;
+
+    if (region === 'screen'){
+      if (behavior === 'wrap'){
+        if (p.x < 0 - pad) { p.x = w + pad; }
+        if (p.x > w + pad) { p.x = 0 - pad; }
+        if (p.y < 0 - pad) { p.y = h + pad; }
+        if (p.y > h + pad) { p.y = 0 - pad; }
+      } else if (behavior === 'bounce'){
+        if (p.x < 0 + pad){ p.x = 0 + pad; p.vx = -p.vx*0.9; }
+        if (p.x > w - pad){ p.x = w - pad; p.vx = -p.vx*0.9; }
+        if (p.y < 0 + pad){ p.y = 0 + pad; p.vy = -p.vy*0.9; }
+        if (p.y > h - pad){ p.y = h - pad; p.vy = -p.vy*0.9; }
+      } else {
+        p.x = clamp(p.x, 0 + pad, w - pad);
+        p.y = clamp(p.y, 0 + pad, h - pad);
+      }
+      return;
     }
+
+    if (region === 'circle'){
+      const R = (Math.min(w, h) * 0.5) * (state.circleRadiusPct/100);
+      const rLimit = Math.max(10, R - pad);
+      const dx = p.x - cx, dy = p.y - cy;
+      const r = Math.hypot(dx, dy) || 1;
+      const nx = dx / r, ny = dy / r;
+
+      if (r > rLimit){
+        if (behavior === 'wrap'){
+          // Teleport across center to opposite boundary
+          p.x = cx - nx * (rLimit - 0.001);
+          p.y = cy - ny * (rLimit - 0.001);
+        } else if (behavior === 'bounce'){
+          // Place on boundary and reflect velocity across normal
+          p.x = cx + nx * rLimit;
+          p.y = cy + ny * rLimit;
+          const vdotn = (p.vx||0)*nx + (p.vy||0)*ny;
+          p.vx = (p.vx || 0) - 2*vdotn*nx; p.vx *= 0.9;
+          p.vy = (p.vy || 0) - 2*vdotn*ny; p.vy *= 0.9;
+        } else { // clamp
+          p.x = cx + nx * rLimit;
+          p.y = cy + ny * rLimit;
+          // optionally damp velocity slightly to avoid jitter
+          p.vx *= 0.8; p.vy *= 0.8;
+        }
+      }
+      return;
+    }
+
+    if (region === 'rect'){
+      const rw = (state.rectWpct/100) * w * 0.5;
+      const rh = (state.rectHpct/100) * h * 0.5;
+      const xMin = cx - rw + pad, xMax = cx + rw - pad;
+      const yMin = cy - rh + pad, yMax = cy + rh - pad;
+
+      if (behavior === 'wrap'){
+        if (p.x < xMin) { p.x = xMax; }
+        if (p.x > xMax) { p.x = xMin; }
+        if (p.y < yMin) { p.y = yMax; }
+        if (p.y > yMax) { p.y = yMin; }
+      } else if (behavior === 'bounce'){
+        if (p.x < xMin){ p.x = xMin; p.vx = -p.vx*0.9; }
+        if (p.x > xMax){ p.x = xMax; p.vx = -p.vx*0.9; }
+        if (p.y < yMin){ p.y = yMin; p.vy = -p.vy*0.9; }
+        if (p.y > yMax){ p.y = yMax; p.vy = -p.vy*0.9; }
+      } else {
+        p.x = clamp(p.x, xMin, xMax);
+        p.y = clamp(p.y, yMin, yMax);
+        p.vx *= 0.8; p.vy *= 0.8;
+      }
+      return;
+    }
+  }
+
+  function drawBoundsOverlay(){
+    if (!state.showBounds) return;
+    ctx.save();
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6,6]);
+
+    const pad = state.edgePad;
+    if (state.boundsRegion === 'screen'){
+      ctx.strokeRect(0+pad, 0+pad, state.width - pad*2, state.height - pad*2);
+    } else if (state.boundsRegion === 'circle'){
+      const R = (Math.min(state.width, state.height) * 0.5) * (state.circleRadiusPct/100) - pad;
+      ctx.beginPath();
+      ctx.arc(state.cx, state.cy, Math.max(5, R), 0, Math.PI*2);
+      ctx.stroke();
+    } else if (state.boundsRegion === 'rect'){
+      const rw = (state.rectWpct/100) * state.width * 0.5 - pad;
+      const rh = (state.rectHpct/100) * state.height * 0.5 - pad;
+      ctx.strokeRect(state.cx - rw, state.cy - rh, rw*2, rh*2);
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   // Sensor painter
@@ -828,9 +946,8 @@
       p.y += f.y * state.turbInt * 8 * dtSec;
       bound(p);
     } else if (state.sensorMode === 'motion' || state.sensorMode === 'motion-swirl'){
-      let ax = state.ax, ay = state.ay;
-      const rx = ax * Math.cos(ang) - ay * Math.sin(ang);
-      const ry = ax * Math.sin(ang) + ay * Math.cos(ang);
+      const rx = state.ax * Math.cos(ang) - state.ay * Math.sin(ang);
+      const ry = state.ax * Math.sin(ang) + state.ay * Math.cos(ang);
       const mag = Math.hypot(rx, ry);
       const dz = state.deadzone;
       const gain = 45 * state.motionSens * (0.5 + state.sensorInf);
@@ -872,9 +989,9 @@
     if (speed > state.minDrawSpeed){
       const old = { x: p.lastX, y: p.lastY, t: now - dt };
       const cur = { x: p.x, y: p.y, t: now };
-      const dist = Math.hypot(cur.x-old.x, cur.y-old.y);
+      const d = Math.hypot(cur.x-old.x, cur.y-old.y);
       const MAX_SEG = Math.min(state.width, state.height) * 0.35;
-      if (dist <= MAX_SEG) drawSymmetricSegment(old, cur, dt, dist);
+      if (d <= MAX_SEG) drawSymmetricSegment(old, cur, dt, d);
       p.lastX = p.x; p.lastY = p.y;
     } else {
       p.lastX = p.x; p.lastY = p.y;
@@ -915,6 +1032,9 @@
 
     // auto
     if (state.auto) stepAgents(dt);
+
+    // bounds overlay (on top)
+    drawBoundsOverlay();
 
     requestAnimationFrame(tick);
   }
@@ -1038,11 +1158,17 @@
   const deadzone = document.getElementById('deadzone'), deadzoneVal = document.getElementById('deadzoneVal');
   const minDraw = document.getElementById('minDraw'), minDrawVal = document.getElementById('minDrawVal');
   const filter = document.getElementById('filter'), filterVal = document.getElementById('filterVal');
-  const boundsMode = document.getElementById('boundsMode');
+
+  const boundsRegion = document.getElementById('boundsRegion');
+  const boundsBehavior = document.getElementById('boundsBehavior');
+  const circleRadius = document.getElementById('circleRadius'), circleRadiusVal = document.getElementById('circleRadiusVal');
+  const rectW = document.getElementById('rectW'), rectWVal = document.getElementById('rectWVal');
+  const rectH = document.getElementById('rectH'), rectHVal = document.getElementById('rectHVal');
   const edgePad = document.getElementById('edgePad'), edgePadVal = document.getElementById('edgePadVal');
   const useLinear = document.getElementById('useLinear');
   const shakeClear = document.getElementById('shakeClear');
   const sensorDraw = document.getElementById('sensorDraw');
+  const showBounds = document.getElementById('showBounds');
   const calibrate = document.getElementById('calibrate');
   const center = document.getElementById('center');
 
@@ -1103,11 +1229,11 @@
     strokeBlock.style.display = (state.brush === 'stroke') ? 'block' : 'none';
     dotsBlock.style.display = (state.brush !== 'stroke') ? 'block' : 'none';
   });
-
   widthMode.addEventListener('change', e => {
     state.stroke.widthMode = e.target.value;
-    widthRangeLabel.style.display = (state.stroke.widthMode === 'speed') ? 'block' : 'block';
-    widthRange.style.display = (state.stroke.widthMode === 'speed') ? 'block' : 'block';
+    const show = (state.stroke.widthMode === 'speed');
+    widthRangeLabel.style.display = show ? 'block' : 'none';
+    widthRange.style.display = show ? 'block' : 'none';
   });
   widthMin.addEventListener('input', e => { state.stroke.widthMin = +e.target.value; widthMinVal.textContent = state.stroke.widthMin|0; });
   widthMax.addEventListener('input', e => { state.stroke.widthMax = +e.target.value; widthMaxVal.textContent = state.stroke.widthMax|0; });
@@ -1143,12 +1269,18 @@
   deadzone.addEventListener('input', e => { state.deadzone = +e.target.value; deadzoneVal.textContent = state.deadzone.toFixed(2); });
   minDraw.addEventListener('input', e => { state.minDrawSpeed = +e.target.value; minDrawVal.textContent = state.minDrawSpeed.toFixed(2); });
   filter.addEventListener('input', e => { state.filterStrength = +e.target.value; filterVal.textContent = state.filterStrength.toFixed(2); });
-  boundsMode.addEventListener('change', e => state.boundsMode = e.target.value);
+
+  boundsRegion.addEventListener('change', e => { state.boundsRegion = e.target.value; });
+  boundsBehavior.addEventListener('change', e => { state.boundsBehavior = e.target.value; });
+  circleRadius.addEventListener('input', e => { state.circleRadiusPct = +e.target.value; circleRadiusVal.textContent = state.circleRadiusPct|0; });
+  rectW.addEventListener('input', e => { state.rectWpct = +e.target.value; rectWVal.textContent = state.rectWpct|0; });
+  rectH.addEventListener('input', e => { state.rectHpct = +e.target.value; rectHVal.textContent = state.rectHpct|0; });
   edgePad.addEventListener('input', e => { state.edgePad = +e.target.value; edgePadVal.textContent = state.edgePad|0; });
 
   useLinear.addEventListener('click', () => { state.useLinear = !state.useLinear; useLinear.classList.toggle('active', state.useLinear); });
   shakeClear.addEventListener('click', () => { state.shakeClears = !state.shakeClears; shakeClear.classList.toggle('active', state.shakeClears); });
   sensorDraw.addEventListener('click', () => { state.sensorDraws = !state.sensorDraws; sensorDraw.classList.toggle('active', state.sensorDraws); });
+  showBounds.addEventListener('click', () => { state.showBounds = !state.showBounds; showBounds.classList.toggle('active', state.showBounds); });
   calibrate.addEventListener('click', () => { state.yawBias = state.yaw; state._tiltBiasX = state.tiltX; state._tiltBiasY = state.tiltY; });
   center.addEventListener('click', () => { state.sensor.inited = false; });
 
@@ -1215,6 +1347,13 @@
     minDrawVal.textContent = state.minDrawSpeed.toFixed(2);
     filterVal.textContent = state.filterStrength.toFixed(2);
     edgePadVal.textContent = state.edgePad|0;
+    circleRadiusVal.textContent = state.circleRadiusPct|0;
+    rectWVal.textContent = state.rectWpct|0;
+    rectHVal.textContent = state.rectHpct|0;
+
+    const show = (state.stroke.widthMode === 'speed');
+    widthRangeLabel.style.display = show ? 'block' : 'none';
+    widthRange.style.display = show ? 'block' : 'none';
     heatControls.style.display = (state.colorMode === 'heat') ? 'block' : 'none';
     strokeBlock.style.display = (state.brush === 'stroke') ? 'block' : 'none';
     dotsBlock.style.display = (state.brush !== 'stroke') ? 'block' : 'none';
