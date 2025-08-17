@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>Psychedelic Sketch — Turbulence Edition</title>
+<style>
+  :root {
+    --bg: #050508;
+    --panel: rgba(15,15,20,0.86);
+    --text: #eaeaf3;
+    --muted: #9aa1b2;
+    --accent: #8bf7ff;
+    --accent-2: #ff8bf7;
+    --btn: rgba(255,255,255,0.08);
+    --btn-hover: rgba(255,255,255,0.16);
+    --shadow: 0 10px 30px rgba(0,0,0,0.45);
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    height: 100%;
+    overflow: hidden;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    touch-action: none;
+    display: block;
+    background:
+      radial-gradient(1200px 800px at 45% 40%, rgba(50,10,60,0.18), transparent 60%),
+      radial-gradient(900px 600px at 65% 60%, rgba(10,60,60,0.14), transparent 60%),
+      var(--bg);
+  }
+  /* Top bar */
+  .topbar {
+    position: fixed;
+    top: env(safe-area-inset-top, 8px);
+    left: 0; right: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .btn {
+    pointer-events: all;
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 8px;
+    background: var(--btn);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 14px; line-height: 1;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    user-select: none;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn.active { outline: 2px solid var(--accent); }
+  .icon { font-size: 18px; }
+  .chip {
+    pointer-events: all;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 12px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(6px);
+  }
+  /* Settings panel */
+  #panel {
+    position: fixed;
+    left: 10px; right: 10px;
+    top: calc(env(safe-area-inset-top, 8px) + 54px);
+    max-width: 880px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transform-origin: top center;
+    transition: transform 200ms ease, opacity 200ms ease;
+    z-index: 11;
+  }
+  #panel.hidden { transform: scale(0.98); opacity: 0; pointer-events: none; }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  @media (min-width: 720px) {
+    .grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (min-width: 1040px) {
+    .grid { grid-template-columns: repeat(4, 1fr); }
+  }
+  .control {
+    display: grid;
+    gap: 6px;
+    background: rgba(255,255,255,0.04);
+    padding: 8px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .control label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; color: var(--muted);
+  }
+  .control input[type="range"],
+  .control select {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .row {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .pill {
+    flex: 1 1 auto; text-align: center;
+  }
+  .pill.active { outline: 2px solid var(--accent); }
+  /* Bottom bar */
+  .bottombar {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom, 8px) + 8px);
+    left: 0; right: 0;
+    display: flex; gap: 10px; justify-content: center;
+    z-index: 10;
+  }
+  .fab {
+    pointer-events: all;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #020206;
+    border: none;
+    border-radius: 14px;
+    padding: 12px 16px;
+    font-weight: 700;
+    box-shadow: 0 10px 30px rgba(139,247,255,0.35), 0 10px 30px rgba(255,139,247,0.25);
+    user-select: none;
+  }
+  .fab.secondary {
+    background: var(--btn);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: var(--shadow);
+  }
+  .legend {
+    position: fixed;
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom, 8px) + 60px);
+    font-size: 12px; color: var(--muted);
+    text-align: center; padding: 6px 10px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; backdrop-filter: blur(8px);
+    z-index: 9;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+
+  <div class="topbar">
+    <button id="menuBtn" class="btn" aria-label="Settings"><span class="icon">⚙️</span> Settings</button>
+    <div class="chip" id="hint">tap + drag • try turbulence • enable sensors</div>
+    <div style="display:flex; gap:8px;">
+      <button id="sensorBtn" class="btn" aria-label="Enable sensors"><span class="icon">📳</span> Sensors</button>
+      <button id="saveBtn" class="btn" aria-label="Save"><span class="icon">📸</span></button>
+    </div>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div class="grid">
+      <div class="control">
+        <label>Palette
+          <select id="palette">
+            <option>Rainbow</option>
+            <option>Neon</option>
+            <option>Sunset</option>
+            <option>Ocean</option>
+            <option>Acid</option>
+          </select>
+        </label>
+        <label>Color speed <span id="colorSpeedVal"></span></label>
+        <input type="range" id="colorSpeed" min="0" max="1.2" step="0.01" value="0.48" />
+      </div>
+
+      <div class="control">
+        <label>Brush size <span id="sizeVal"></span></label>
+        <input type="range" id="size" min="1" max="100" step="1" value="28" />
+        <label>Glow <span id="glowVal"></span></label>
+        <input type="range" id="glow" min="0" max="68" step="1" value="24" />
+        <div class="row">
+          <button id="brushSoft" class="btn pill active">Soft</button>
+          <button id="brushSpray" class="btn pill">Spray</button>
+        </div>
+      </div>
+
+      <div class="control">
+        <label>Symmetry slices <span id="symVal"></span></label>
+        <input type="range" id="sym" min="1" max="24" step="1" value="10" />
+        <div class="row">
+          <button id="mirror" class="btn pill">Mirror</button>
+          <button id="kaleido" class="btn pill active">Kaleido</button>
+        </div>
+      </div>
+
+      <div class="control">
+        <label>Trail fade <span id="fadeVal"></span></label>
+        <input type="range" id="fade" min="0" max="0.25" step="0.005" value="0.035" />
+        <label>Scatter <span id="scatterVal"></span></label>
+        <input type="range" id="scatter" min="0" max="1" step="0.01" value="0.22" />
+      </div>
+
+      <div class="control">
+        <label>Turbulence mode
+          <select id="turbMode">
+            <option value="off">Off</option>
+            <option value="noise">Noise</option>
+            <option value="curl" selected>Curl</option>
+          </select>
+        </label>
+        <label>Intensity <span id="turbIntVal"></span></label>
+        <input type="range" id="turbInt" min="0" max="1.2" step="0.01" value="0.65" />
+        <label>Scale <span id="turbScaleVal"></span></label>
+        <input type="range" id="turbScale" min="0.001" max="0.03" step="0.001" value="0.009" />
+        <label>Flow speed <span id="turbSpeedVal"></span></label>
+        <input type="range" id="turbSpeed" min="0" max="2" step="0.01" value="0.6" />
+      </div>
+
+      <div class="control">
+        <label>Sensor mode
+          <select id="sensorMode">
+            <option value="off">Off</option>
+            <option value="orientation">Orientation</option>
+            <option value="motion">Motion</option>
+          </select>
+        </label>
+        <label>Sensor influence <span id="sensorInfVal"></span></label>
+        <input type="range" id="sensorInf" min="0" max="1" step="0.01" value="0.5" />
+        <div class="row">
+          <button id="shakeClear" class="btn pill">Shake clears</button>
+        </div>
+      </div>
+
+      <div class="control">
+        <label>Background
+          <select id="bgMode">
+            <option value="dark">Dark</option>
+            <option value="deep">Deep Gradient</option>
+            <option value="light">Light</option>
+          </select>
+        </label>
+        <div class="row">
+          <button id="composite" class="btn pill active">Additive</button>
+          <button id="randomize" class="btn pill">Randomize</button>
+        </div>
+      </div>
+
+      <div class="control">
+        <label>Quality
+          <select id="quality">
+            <option value="balanced" selected>Balanced</option>
+            <option value="performance">Performance</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        <div class="row">
+          <button id="resetView" class="btn pill">Reset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend" id="legend">draw with one finger • try Curl turbulence • Auto draws for you</div>
+
+  <div class="bottombar">
+    <button id="clearBtn" class="fab secondary">Clear</button>
+    <button id="autoBtn" class="fab">Auto</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  // Canvas + DPR setup (simple quality tiers to stay mobile-friendly)
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: true });
+  let DPR_MAX = 2; // adjusted by quality setting
+  let DPR = Math.min(DPR_MAX, window.devicePixelRatio || 1);
+
+  const state = {
+    width: 0, height: 0, cx: 0, cy: 0,
+    drawing: false,
+    // brushes
+    brush: 'soft', // 'soft'|'spray'
+    brushSize: 28,
+    glow: 24,
+    // symmetry
+    symmetry: 10,
+    kaleido: true,
+    mirror: false,
+    rotOffset: 0, // symmetry rotation offset
+    // visuals
+    palette: 'Rainbow',
+    colorSpeed: 0.48,
+    colorOffset: Math.random() * 360,
+    scatter: 0.22,
+    fade: 0.035,
+    composite: 'lighter', // or 'source-over'
+    bgMode: 'dark',
+    // turbulence
+    turbMode: 'curl', // 'off'|'noise'|'curl'
+    turbInt: 0.65,
+    turbScale: 0.009,
+    turbSpeed: 0.6,
+    // sensors
+    sensorsEnabled: false,
+    sensorMode: 'off', // 'off'|'orientation'|'motion'
+    sensorInf: 0.5,
+    shakeClears: false,
+    tiltX: 0, tiltY: 0, yaw: 0,
+    accel: 0,
+    // auto
+    auto: false,
+    agents: [],
+    // perf
+    quality: 'balanced',
+    // pointers
+    pointers: new Map(), // pointerId -> {x,y,t, pressure}
+  };
+
+  // Utils
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  const smooth = t => t*t*(3-2*t);
+
+  // Simple deterministic value-noise (3D: x,y,time)
+  function hash3(i,j,k){
+    const s = Math.sin(i*127.1 + j*311.7 + k*74.7)*43758.5453123;
+    return s - Math.floor(s);
+  }
+  function noise3(x,y,z){
+    const i = Math.floor(x), j = Math.floor(y), k = Math.floor(z);
+    const fx = x - i, fy = y - j, fz = z - k;
+    const u = smooth(fx), v = smooth(fy), w = smooth(fz);
+    const n000 = hash3(i, j, k);
+    const n100 = hash3(i+1, j, k);
+    const n010 = hash3(i, j+1, k);
+    const n110 = hash3(i+1, j+1, k);
+    const n001 = hash3(i, j, k+1);
+    const n101 = hash3(i+1, j, k+1);
+    const n011 = hash3(i, j+1, k+1);
+    const n111 = hash3(i+1, j+1, k+1);
+    const nx00 = lerp(n000, n100, u);
+    const nx10 = lerp(n010, n110, u);
+    const nx01 = lerp(n001, n101, u);
+    const nx11 = lerp(n011, n111, u);
+    const nxy0 = lerp(nx00, nx10, v);
+    const nxy1 = lerp(nx01, nx11, v);
+    return lerp(nxy0, nxy1, w); // 0..1
+  }
+
+  // Flow field from turbulence settings
+  function flowVec(x, y, t){
+    if (state.turbMode === 'off') return { x: 0, y: 0 };
+    const s = state.turbScale;
+    const z = t * state.turbSpeed;
+
+    // Sensor tilt gently biases flow
+    let biasX = state.tiltX * state.sensorInf * 0.8;
+    let biasY = -state.tiltY * state.sensorInf * 0.8;
+
+    let fx = 0, fy = 0;
+    if (state.turbMode === 'noise'){
+      // Two independent noise channels => vector
+      fx = (noise3(x*s + 5.2, y*s + 1.7, z) - 0.5) * 2;
+      fy = (noise3(x*s - 7.1, y*s - 3.4, z) - 0.5) * 2;
+    } else { // curl
+      // Gradient-based curl of scalar noise => nice swirls (divergence-free)
+      const eps = 1.0; // sample offset in "pixel" space pre-scale
+      const nx1 = noise3((x+eps)*s, y*s, z);
+      const nx2 = noise3((x-eps)*s, y*s, z);
+      const ny1 = noise3(x*s, (y+eps)*s, z);
+      const ny2 = noise3(x*s, (y-eps)*s, z);
+      const dnx = nx1 - nx2; // ∂n/∂x
+      const dny = ny1 - ny2; // ∂n/∂y
+      fx = dny;      // curl = (∂n/∂y, -∂n/∂x)
+      fy = -dnx;
+    }
+
+    // Normalize-ish
+    const mag = Math.hypot(fx, fy) || 1;
+    fx /= mag; fy /= mag;
+
+    // Add sensor bias and mild motion bursts
+    const bump = clamp(state.accel*0.02, 0, 2) * state.sensorInf;
+    fx = fx*(1 + bump) + biasX;
+    fy = fy*(1 + bump) + biasY;
+
+    return { x: fx, y: fy };
+  }
+
+  // Colors / Palettes
+  function hsla(h,s,l,a=1){ return `hsla(${(h%360+360)%360},${s}%,${l}%,${a})`; }
+  function getColor(name, t, x, y){
+    const base = state.colorOffset + t;
+    switch(name){
+      case 'Neon': {
+        const h = base + (x - state.cx)*0.05;
+        const l = 60 + Math.sin((y + t)*0.01)*10;
+        return hsla(h, 100, l);
+      }
+      case 'Sunset': {
+        const h = 10 + 30*Math.sin((t + x*0.3)*0.003) + 20*Math.sin((t + y*0.2)*0.002);
+        const s = 95;
+        const l = 55 + 10*Math.sin((t)*0.0012);
+        return hsla(h, s, l);
+      }
+      case 'Ocean': {
+        const h = 190 + 40*Math.sin((x+y+t)*0.002);
+        const s = 90;
+        const l = 50 + 10*Math.sin((t + x)*0.001);
+        return hsla(h, s, l);
+      }
+      case 'Acid': {
+        const h = base*1.1 + 180*Math.sin((x*0.02)+(t*0.003));
+        return hsla(h, 100, 60);
+      }
+      case 'Rainbow':
+      default: {
+        const h = base + 0.06*(x - state.cx) + 0.04*(y - state.cy);
+        return hsla(h, 100, 58);
+      }
+    }
+  }
+
+  // Resize
+  function resize(preserve=false){
+    const oldCanvas = preserve ? canvas : null;
+    let prevBitmap = null;
+    if (preserve){
+      try {
+        prevBitmap = canvas.transferToImageBitmap ? canvas.transferToImageBitmap() : null;
+      } catch(e){ prevBitmap = null; }
+    }
+
+    DPR = Math.min(DPR_MAX, window.devicePixelRatio || 1);
+    const w = Math.floor(window.innerWidth);
+    const h = Math.floor(window.innerHeight);
+    canvas.width = Math.floor(w * DPR);
+    canvas.height = Math.floor(h * DPR);
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    state.width = w; state.height = h;
+    state.cx = w/2; state.cy = h/2;
+    paintBackground(true);
+
+    if (preserve && prevBitmap){
+      // scale previous content to new canvas (best-effort)
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(prevBitmap, 0, 0, w, h);
+      ctx.restore();
+      prevBitmap.close?.();
+    }
+  }
+  window.addEventListener('resize', () => resize(true), { passive: true });
+
+  function paintBackground(hard=false){
+    ctx.save();
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    if (hard) ctx.clearRect(0,0,state.width,state.height);
+    if (state.bgMode === 'light'){
+      ctx.fillStyle = 'rgba(250,252,255,1)';
+      ctx.fillRect(0,0,state.width,state.height);
+    } else if (state.bgMode === 'deep'){
+      const g = ctx.createRadialGradient(state.cx, state.cy, Math.min(state.width,state.height)*0.1, state.cx, state.cy, Math.max(state.width,state.height));
+      g.addColorStop(0, 'rgba(10,10,20,1)');
+      g.addColorStop(1, 'rgba(0,0,0,1)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,state.width,state.height);
+    } else {
+      ctx.fillStyle = 'rgba(5,5,8,1)';
+      ctx.fillRect(0,0,state.width,state.height);
+    }
+    ctx.restore();
+  }
+
+  // Pointer input
+  function onDown(e){
+    e.preventDefault();
+    canvas.setPointerCapture?.(e.pointerId);
+    state.drawing = true;
+    state.pointers.set(e.pointerId, {
+      x: e.clientX, y: e.clientY, t: performance.now(), pressure: e.pressure ?? 0.6
+    });
+  }
+  function onMove(e){
+    const prev = state.pointers.get(e.pointerId);
+    if (!prev) return;
+    const now = { x: e.clientX, y: e.clientY, t: performance.now(), pressure: e.pressure ?? 0.6 };
+    drawSymmetricSegment(prev, now);
+    state.pointers.set(e.pointerId, now);
+  }
+  function onUp(e){
+    state.pointers.delete(e.pointerId);
+    if (state.pointers.size === 0) state.drawing = false;
+  }
+  canvas.addEventListener('pointerdown', onDown, { passive: false });
+  canvas.addEventListener('pointermove', onMove, { passive: false });
+  canvas.addEventListener('pointerup', onUp, { passive: false });
+  canvas.addEventListener('pointercancel', onUp, { passive: false });
+  canvas.addEventListener('pointerleave', onUp, { passive: false });
+
+  // Symmetry helpers
+  function rotateAround(x,y, cx,cy, ang){
+    const dx = x - cx, dy = y - cy;
+    const cos = Math.cos(ang), sin = Math.sin(ang);
+    return { x: cx + dx*cos - dy*sin, y: cy + dx*sin + dy*cos };
+  }
+  function mirrorAcrossCenter(x,y){
+    const dx = x - state.cx;
+    return { x: state.cx - dx, y };
+  }
+  function reflectAcrossAxis(p, ang){
+    // reflect point p across a line through center with angle ang
+    const dx = p.x - state.cx, dy = p.y - state.cy;
+    const ux = Math.cos(ang), uy = Math.sin(ang);
+    const dot = dx*ux + dy*uy;
+    const rx = 2*dot*ux - dx;
+    const ry = 2*dot*uy - dy;
+    return { x: state.cx + rx, y: state.cy + ry };
+  }
+
+  function drawSymmetricSegment(a, b){
+    const slices = Math.max(1, Math.floor(state.symmetry));
+    const angleStep = (Math.PI*2) / slices;
+    const rotOff = state.rotOffset;
+
+    for (let i=0; i<slices; i++){
+      const ang = i * angleStep + rotOff;
+      const ra = rotateAround(a.x, a.y, state.cx, state.cy, ang);
+      const rb = rotateAround(b.x, b.y, state.cx, state.cy, ang);
+      drawOrganicSegment(ra, rb);
+
+      if (state.kaleido){
+        const ka = reflectAcrossAxis(ra, ang);
+        const kb = reflectAcrossAxis(rb, ang);
+        drawOrganicSegment(ka, kb);
+      }
+      if (state.mirror){
+        const ma = mirrorAcrossCenter(ra.x, ra.y);
+        const mb = mirrorAcrossCenter(rb.x, rb.y);
+        drawOrganicSegment(ma, mb);
+      }
+    }
+  }
+
+  // Drawing segment with turbulence, spray, noise wiggle, sensor dynamics
+  function drawOrganicSegment(a, b){
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.5) return;
+
+    const tNow = performance.now();
+    // step count: fewer steps for larger brush => perf-friendly
+    const stepBase = Math.max(1, state.brushSize * 0.32);
+    const steps = Math.max(1, Math.floor(dist / Math.max(1, stepBase)));
+    const nx = -dy / dist, ny = dx / dist; // normal
+
+    ctx.save();
+    ctx.globalCompositeOperation = state.composite;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowBlur = state.glow;
+    ctx.globalAlpha = 0.95;
+
+    for (let i=0; i<=steps; i++){
+      const f = i/steps;
+      let x = lerp(a.x, b.x, f);
+      let y = lerp(a.y, b.y, f);
+
+      // Turbulence warp (flow field)
+      if (state.turbMode !== 'off' && state.turbInt > 0){
+        const fv = flowVec(x, y, tNow*0.001);
+        // scale warp based on brush size & intensity
+        const warp = state.turbInt * (0.8 + 0.6*Math.abs(Math.sin((tNow*0.002)+(i*0.3))));
+        x += fv.x * warp * (6 + state.brushSize*0.2);
+        y += fv.y * warp * (6 + state.brushSize*0.2);
+      }
+
+      // Organic wiggle on normal + sensors
+      const nval = (noise3(x*0.015, y*0.015, tNow*0.001) - 0.5) * 2;
+      const tiltW = (state.tiltX + state.tiltY)*0.5;
+      const wiggle = (state.scatter*12 + state.brushSize*0.12) * (nval + tiltW*state.sensorInf*0.6);
+      x += nx * wiggle;
+      y += ny * wiggle;
+
+      // size & color
+      const pressure = state.pointers.size ? [...state.pointers.values()][0]?.pressure || 0.7 : 0.7;
+      const accelBoost = (state.accel * 0.04) * state.sensorInf;
+      const size = Math.max(1, state.brushSize * (0.6 + 0.4*Math.abs(nval)) * (0.85 + accelBoost) * (0.6 + 0.7*pressure));
+      const hueShift = dist * state.colorSpeed * 0.3 + i * state.colorSpeed * 1.1 + (state.yaw*15*state.sensorInf);
+      const col = getColor(state.palette, state.colorOffset + hueShift, x, y);
+
+      ctx.shadowColor = col;
+      ctx.fillStyle = col;
+
+      if (state.brush === 'soft'){
+        ctx.beginPath();
+        ctx.arc(x, y, size*0.5, 0, Math.PI*2);
+        ctx.fill();
+      } else { // spray
+        const sprayCount = 3;
+        for (let s=0; s<sprayCount; s++){
+          const ang = Math.random()*Math.PI*2;
+          const rad = size * (0.2 + Math.random()*0.6) * state.scatter * 1.4;
+          const sx = x + Math.cos(ang)*rad;
+          const sy = y + Math.sin(ang)*rad;
+          ctx.globalAlpha = 0.35 + Math.random()*0.25;
+          ctx.beginPath();
+          ctx.arc(sx, sy, size*(0.12 + Math.random()*0.24), 0, Math.PI*2);
+          ctx.fill();
+          ctx.globalAlpha = 0.95;
+        }
+      }
+
+      // sparkle specks
+      if (state.scatter > 0.12 && (i % 2 === 0)){
+        const sp = (noise3(x*0.03, y*0.03, tNow*0.003) - 0.5) * 2;
+        if (Math.abs(sp) > 0.35){
+          const sx = x + (Math.random()-0.5)*size*state.scatter*2;
+          const sy = y + (Math.random()-0.5)*size*state.scatter*2;
+          ctx.globalAlpha = 0.3;
+          ctx.beginPath();
+          ctx.arc(sx, sy, size*0.2, 0, Math.PI*2);
+          ctx.fill();
+          ctx.globalAlpha = 0.95;
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  // Auto agents
+  function makeAgents(n=5){
+    state.agents = [];
+    for (let i=0;i<n;i++){
+      state.agents.push({
+        x: state.cx + (Math.random()-0.5)*state.width*0.4,
+        y: state.cy + (Math.random()-0.5)*state.height*0.4,
+        vx: 0, vy: 0,
+        r: state.brushSize * (0.8 + Math.random()*0.6),
+      });
+    }
+  }
+  function stepAgents(dt){
+    const t = performance.now();
+    const sp = 0.9;
+    for (const a of state.agents){
+      // Flow-based steering
+      const f = flowVec(a.x, a.y, t*0.001);
+      let fx = f.x * 0.7;
+      let fy = f.y * 0.7;
+
+      a.vx = (a.vx + fx)*0.96;
+      a.vy = (a.vy + fy)*0.96;
+
+      const old = { x: a.x, y: a.y };
+      a.x += a.vx * sp * dt*0.06;
+      a.y += a.vy * sp * dt*0.06;
+
+      // wrap
+      if (a.x < -20) a.x = state.width+20;
+      if (a.x > state.width+20) a.x = -20;
+      if (a.y < -20) a.y = state.height+20;
+      if (a.y > state.height+20) a.y = -20;
+
+      drawSymmetricSegment(old, {x:a.x, y:a.y, t:t});
+    }
+  }
+
+  // Loop
+  let lastFrame = performance.now();
+  function tick(){
+    const now = performance.now();
+    const dt = Math.min(100, now - lastFrame);
+    lastFrame = now;
+
+    // trail fade
+    if (state.fade > 0){
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      const alpha = clamp(state.fade, 0, 1);
+      if (state.bgMode === 'light'){
+        ctx.fillStyle = `rgba(250,252,255,${alpha})`;
+      } else if (state.bgMode === 'deep'){
+        ctx.fillStyle = `rgba(0,0,0,${alpha*0.95})`;
+      } else {
+        ctx.fillStyle = `rgba(5,5,8,${alpha})`;
+      }
+      ctx.fillRect(0,0,state.width,state.height);
+      ctx.restore();
+    }
+
+    // symmetry rotation from yaw (subtle)
+    state.rotOffset = state.yaw * 0.15 * state.sensorInf;
+
+    // auto drawing
+    if (state.auto){
+      stepAgents(dt);
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  // Sensors
+  let orientationListenerAdded = false;
+  let motionListenerAdded = false;
+
+  async function enableSensors(){
+    try {
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+        await DeviceMotionEvent.requestPermission().catch(()=>null);
+      }
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+        await DeviceOrientationEvent.requestPermission().catch(()=>null);
+      }
+    } catch(e){}
+    addSensorListeners();
+    state.sensorsEnabled = true;
+    sensorBtn.classList.add('active');
+    sensorBtn.innerHTML = '📳 Sensors On';
+  }
+  function addSensorListeners(){
+    if (!orientationListenerAdded && 'DeviceOrientationEvent' in window){
+      window.addEventListener('deviceorientation', onOrientation, { passive: true });
+      orientationListenerAdded = true;
+    }
+    if (!motionListenerAdded && 'DeviceMotionEvent' in window){
+      window.addEventListener('devicemotion', onMotion, { passive: true });
+      motionListenerAdded = true;
+    }
+  }
+  function onOrientation(e){
+    if (state.sensorMode !== 'orientation' && state.sensorMode !== 'motion') return;
+    const beta = e.beta || 0;   // x tilt (-180,180)
+    const gamma = e.gamma || 0; // y tilt (-90,90)
+    const alpha = e.alpha || 0; // yaw
+    state.tiltX = clamp(gamma/45, -1, 1);
+    state.tiltY = clamp(beta/45, -1, 1);
+    state.yaw = alpha/180 - 1; // roughly -1..1
+  }
+  let lastShakeTime = 0;
+  function onMotion(e){
+    if (state.sensorMode !== 'motion') return;
+    const a = e.accelerationIncludingGravity || e.acceleration || { x:0, y:0, z:0 };
+    const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
+    state.accel = mag;
+    if (state.shakeClears && mag > 22){
+      const t = performance.now();
+      if (t - lastShakeTime > 800){
+        lastShakeTime = t;
+        clearCanvas();
+        navigator.vibrate?.(50);
+      }
+    }
+  }
+
+  // Controls/UI
+  const panel = document.getElementById('panel');
+  const menuBtn = document.getElementById('menuBtn');
+  const saveBtn = document.getElementById('saveBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const autoBtn = document.getElementById('autoBtn');
+  const sensorBtn = document.getElementById('sensorBtn');
+  const hint = document.getElementById('hint');
+
+  const paletteEl = document.getElementById('palette');
+  const colorSpeed = document.getElementById('colorSpeed');
+  const colorSpeedVal = document.getElementById('colorSpeedVal');
+  const size = document.getElementById('size');
+  const sizeVal = document.getElementById('sizeVal');
+  const glow = document.getElementById('glow');
+  const glowVal = document.getElementById('glowVal');
+  const sym = document.getElementById('sym');
+  const symVal = document.getElementById('symVal');
+  const mirror = document.getElementById('mirror');
+  const kaleido = document.getElementById('kaleido');
+  const fade = document.getElementById('fade');
+  const fadeVal = document.getElementById('fadeVal');
+  const scatter = document.getElementById('scatter');
+  const scatterVal = document.getElementById('scatterVal');
+
+  const turbMode = document.getElementById('turbMode');
+  const turbInt = document.getElementById('turbInt');
+  const turbIntVal = document.getElementById('turbIntVal');
+  const turbScale = document.getElementById('turbScale');
+  const turbScaleVal = document.getElementById('turbScaleVal');
+  const turbSpeed = document.getElementById('turbSpeed');
+  const turbSpeedVal = document.getElementById('turbSpeedVal');
+
+  const sensorMode = document.getElementById('sensorMode');
+  const sensorInf = document.getElementById('sensorInf');
+  const sensorInfVal = document.getElementById('sensorInfVal');
+  const shakeClear = document.getElementById('shakeClear');
+  const bgMode = document.getElementById('bgMode');
+  const composite = document.getElementById('composite');
+  const randomize = document.getElementById('randomize');
+
+  const quality = document.getElementById('quality');
+  const resetView = document.getElementById('resetView');
+
+  const brushSoft = document.getElementById('brushSoft');
+  const brushSpray = document.getElementById('brushSpray');
+
+  menuBtn.addEventListener('click', () => panel.classList.toggle('hidden'));
+
+  saveBtn.addEventListener('click', () => {
+    try {
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `psychedelic-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e){
+      window.open(canvas.toDataURL('image/png'), '_blank');
+    }
+  });
+
+  clearBtn.addEventListener('click', clearCanvas);
+  function clearCanvas(){ paintBackground(true); }
+
+  autoBtn.addEventListener('click', () => {
+    state.auto = !state.auto;
+    autoBtn.textContent = state.auto ? 'Auto (On)' : 'Auto';
+    if (state.auto && state.agents.length === 0) makeAgents(6);
+  });
+
+  sensorBtn.addEventListener('click', () => {
+    if (!state.sensorsEnabled) {
+      enableSensors();
+    } else {
+      state.sensorsEnabled = false;
+      state.sensorMode = 'off';
+      sensorMode.value = 'off';
+      sensorBtn.classList.remove('active');
+      sensorBtn.innerHTML = '📳 Sensors';
+    }
+  });
+
+  // Brush toggle
+  function setBrush(name){
+    state.brush = name;
+    brushSoft.classList.toggle('active', name==='soft');
+    brushSpray.classList.toggle('active', name==='spray');
+  }
+  brushSoft.addEventListener('click', ()=>setBrush('soft'));
+  brushSpray.addEventListener('click', ()=>setBrush('spray'));
+
+  // Controls wiring
+  paletteEl.addEventListener('change', e => state.palette = e.target.value);
+  colorSpeed.addEventListener('input', e => { state.colorSpeed = +e.target.value; colorSpeedVal.textContent = state.colorSpeed.toFixed(2); });
+  size.addEventListener('input', e => { state.brushSize = +e.target.value; sizeVal.textContent = state.brushSize|0; });
+  glow.addEventListener('input', e => { state.glow = +e.target.value; glowVal.textContent = state.glow|0; });
+  sym.addEventListener('input', e => { state.symmetry = parseInt(e.target.value,10); symVal.textContent = state.symmetry; });
+  mirror.addEventListener('click', () => { state.mirror = !state.mirror; mirror.classList.toggle('active', state.mirror); });
+  kaleido.addEventListener('click', () => { state.kaleido = !state.kaleido; kaleido.classList.toggle('active', state.kaleido); });
+  fade.addEventListener('input', e => { state.fade = +e.target.value; fadeVal.textContent = state.fade.toFixed(3); });
+  scatter.addEventListener('input', e => { state.scatter = +e.target.value; scatterVal.textContent = state.scatter.toFixed(2); });
+
+  turbMode.addEventListener('change', e => state.turbMode = e.target.value);
+  turbInt.addEventListener('input', e => { state.turbInt = +e.target.value; turbIntVal.textContent = state.turbInt.toFixed(2); });
+  turbScale.addEventListener('input', e => { state.turbScale = +e.target.value; turbScaleVal.textContent = state.turbScale.toFixed(3); });
+  turbSpeed.addEventListener('input', e => { state.turbSpeed = +e.target.value; turbSpeedVal.textContent = state.turbSpeed.toFixed(2); });
+
+  sensorMode.addEventListener('change', e => {
+    state.sensorMode = e.target.value;
+    if (state.sensorMode !== 'off' && !state.sensorsEnabled) enableSensors();
+  });
+  sensorInf.addEventListener('input', e => {
+    state.sensorInf = +e.target.value;
+    sensorInfVal.textContent = state.sensorInf.toFixed(2);
+  });
+  shakeClear.addEventListener('click', () => {
+    state.shakeClears = !state.shakeClears;
+    shakeClear.classList.toggle('active', state.shakeClears);
+  });
+
+  bgMode.addEventListener('change', e => { state.bgMode = e.target.value; paintBackground(true); });
+
+  composite.addEventListener('click', () => {
+    state.composite = (state.composite === 'lighter') ? 'source-over' : 'lighter';
+    composite.textContent = (state.composite === 'lighter') ? 'Additive' : 'Normal';
+    composite.classList.toggle('active', state.composite === 'lighter');
+  });
+
+  randomize.addEventListener('click', () => {
+    state.colorOffset = Math.random()*360;
+    state.brushSize = Math.floor(10 + Math.random()*80);
+    size.value = state.brushSize; sizeVal.textContent = state.brushSize;
+    state.glow = Math.floor(Math.random()*60);
+    glow.value = state.glow; glowVal.textContent = state.glow;
+    state.scatter = +(Math.random().toFixed(2));
+    scatter.value = state.scatter; scatterVal.textContent = state.scatter.toFixed(2);
+    state.symmetry = Math.floor(1 + Math.random()*18);
+    sym.value = state.symmetry; symVal.textContent = state.symmetry;
+    state.palette = ['Rainbow','Neon','Sunset','Ocean','Acid'][Math.floor(Math.random()*5)];
+    paletteEl.value = state.palette;
+    state.turbMode = Math.random() > 0.5 ? 'curl' : 'noise';
+    turbMode.value = state.turbMode;
+    state.turbInt = +(Math.random()*1.1).toFixed(2);
+    turbInt.value = state.turbInt; turbIntVal.textContent = state.turbInt.toFixed(2);
+    state.turbScale = +(0.002 + Math.random()*0.02).toFixed(3);
+    turbScale.value = state.turbScale; turbScaleVal.textContent = state.turbScale.toFixed(3);
+    state.turbSpeed = +(Math.random()*1.2).toFixed(2);
+    turbSpeed.value = state.turbSpeed; turbSpeedVal.textContent = state.turbSpeed.toFixed(2);
+  });
+
+  quality.addEventListener('change', e => {
+    state.quality = e.target.value;
+    if (state.quality === 'performance') {
+      DPR_MAX = 1;
+      state.glow = Math.min(state.glow, 18);
+      glow.value = state.glow; glowVal.textContent = state.glow|0;
+    } else if (state.quality === 'high') {
+      DPR_MAX = 2.5; // cap for mobile sanity
+    } else {
+      DPR_MAX = 2;
+    }
+    resize(true);
+  });
+
+  resetView.addEventListener('click', () => {
+    state.colorOffset = Math.random()*360;
+    state.rotOffset = 0;
+    paintBackground(true);
+  });
+
+  // Init labels and UI
+  function syncLabels(){
+    colorSpeedVal.textContent = state.colorSpeed.toFixed(2);
+    sizeVal.textContent = state.brushSize|0;
+    glowVal.textContent = state.glow|0;
+    symVal.textContent = state.symmetry;
+    fadeVal.textContent = state.fade.toFixed(3);
+    scatterVal.textContent = state.scatter.toFixed(2);
+    turbIntVal.textContent = state.turbInt.toFixed(2);
+    turbScaleVal.textContent = state.turbScale.toFixed(3);
+    turbSpeedVal.textContent = state.turbSpeed.toFixed(2);
+    sensorInfVal.textContent = state.sensorInf.toFixed(2);
+  }
+
+  // Hide hint after first touch
+  let hinted = false;
+  canvas.addEventListener('pointerdown', ()=>{
+    if (!hinted){
+      hinted = true;
+      hint.style.opacity = '0';
+      setTimeout(()=> hint.style.display='none', 400);
+    }
+  }, { passive: true });
+
+  // Kickoff
+  resize();
+  syncLabels();
+  paintBackground(true);
+  makeAgents(6);
+  requestAnimationFrame(tick);
+
+  // Prevent iOS double-tap zoom
+  let lastTouch = 0;
+  document.addEventListener('touchend', function(e){
+    const t = Date.now();
+    if (t - lastTouch < 300) e.preventDefault();
+    lastTouch = t;
+  }, {passive:false});
+
+})();
+</script>
+</body>
+</html>
