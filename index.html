@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>Psychedelic Sketch — Solid Stroke + Center Bounds</title>
+<title>Psychedelic Sketch — Stroke + Center Bounds (Tabbed, Refined Motion)</title>
 <style>
   :root {
     --bg: #050508;
@@ -37,8 +37,8 @@
   }
   .topbar {
     position: fixed; top: env(safe-area-inset-top, 8px); left: 0; right: 0;
-    display: flex; align-items: center; justify-content: space-between; padding: 8px 10px;
-    pointer-events: none; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 10px; pointer-events: none; z-index: 20;
   }
   .btn {
     pointer-events: all; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -52,17 +52,40 @@
   .chip {
     pointer-events: all; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
     color: var(--muted); border-radius: 999px; padding: 8px 12px; font-size: 12px; box-shadow: var(--shadow); backdrop-filter: blur(6px);
+    max-width: 40vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+
+  /* Panel (Tabbed) */
   #panel {
-    position: fixed; left: 10px; right: 10px; top: calc(env(safe-area-inset-top, 8px) + 54px);
-    max-width: 1200px; margin: 0 auto; background: var(--panel); border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 16px; padding: 12px; box-shadow: var(--shadow); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    transform-origin: top center; transition: transform 200ms ease, opacity 200ms ease; z-index: 11;
+    position: fixed; left: 10px; right: 10px; bottom: 12px;
+    top: calc(env(safe-area-inset-top, 8px) + 56px);
+    max-width: 1200px; margin: 0 auto; background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; box-shadow: var(--shadow);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    transform-origin: top center; transition: transform 200ms ease, opacity 200ms ease;
+    z-index: 19; display: grid; grid-template-rows: auto 1fr; overflow: hidden;
   }
   #panel.hidden { transform: scale(0.98); opacity: 0; pointer-events: none; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  @media (min-width: 720px) { .grid { grid-template-columns: repeat(3, 1fr); } }
-  @media (min-width: 1120px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+
+  .tabs {
+    position: sticky; top: 0; z-index: 1;
+    display: flex; gap: 6px; overflow-x: auto;
+    padding: 8px; background: rgba(10,10,15,0.9); border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .tabbtn {
+    flex: 0 0 auto; padding: 8px 10px; border-radius: 10px; font-size: 12px; color: var(--muted);
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+    user-select: none; white-space: nowrap;
+  }
+  .tabbtn.active { color: var(--text); outline: 2px solid var(--accent); }
+  .tabcontent {
+    overflow: auto; padding: 10px; display: none;
+  }
+  .tabcontent.active { display: block; }
+
+  .section { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  @media (min-width: 680px) { .section { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 1000px) { .section { grid-template-columns: 1fr 1fr 1fr; } }
   .control {
     display: grid; gap: 6px; background: rgba(255,255,255,0.04);
     padding: 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
@@ -72,6 +95,7 @@
   .row { display: flex; gap: 8px; flex-wrap: wrap; }
   .pill { flex: 1 1 auto; text-align: center; }
   .pill.active { outline: 2px solid var(--accent); }
+
   .bottombar {
     position: fixed; bottom: calc(env(safe-area-inset-bottom, 8px) + 8px); left: 0; right: 0; display: flex; gap: 10px; justify-content: center; z-index: 10;
   }
@@ -93,222 +117,276 @@
 
   <div class="topbar">
     <button id="menuBtn" class="btn" aria-label="Settings"><span class="icon">⚙️</span> Settings</button>
-    <div class="chip" id="hint">Sensors → Motion to draw by moving • Try Circle/Rect bounds</div>
+    <div class="chip" id="hint">Motion paints • Bounds now Wrap/Bounce/Clamp clearly • Show Brush to see movement</div>
     <div style="display:flex; gap:8px;">
       <button id="sensorBtn" class="btn" aria-label="Enable sensors"><span class="icon">📳</span> Sensors</button>
       <button id="saveBtn" class="btn" aria-label="Save"><span class="icon">📸</span></button>
     </div>
   </div>
 
+  <!-- Tabbed settings panel -->
   <div id="panel" class="hidden">
-    <div class="grid">
-      <div class="control">
-        <label>Palette
-          <select id="palette">
-            <option>Rainbow</option>
-            <option>Neon</option>
-            <option>Sunset</option>
-            <option>Ocean</option>
-            <option>Acid</option>
-          </select>
-        </label>
-        <label>Color mode
-          <select id="colorMode">
-            <option value="palette" selected>Palette</option>
-            <option value="velocity">Velocity</option>
-            <option value="accel">Acceleration</option>
-            <option value="spin">Spin (gyro)</option>
-            <option value="direction">Direction</option>
-            <option value="heat">Heat</option>
-          </select>
-        </label>
-        <label id="metricRangeLabel">Metric range <span id="metricRangeVal"></span></label>
-        <input type="range" id="metricRange" min="1" max="600" step="1" value="180" />
-        <div id="heatControls">
-          <label>Heat gain <span id="heatGainVal"></span></label>
-          <input type="range" id="heatGain" min="0" max="2" step="0.02" value="0.6" />
-          <label>Heat decay <span id="heatDecayVal"></span></label>
-          <input type="range" id="heatDecay" min="0" max="1" step="0.01" value="0.14" />
-        </div>
-        <label>Color speed <span id="colorSpeedVal"></span></label>
-        <input type="range" id="colorSpeed" min="0" max="1.2" step="0.01" value="0.48" />
-        <div class="row">
-          <button id="lockColor" class="btn pill">Lock color per segment</button>
-        </div>
-      </div>
+    <div class="tabs" id="tabs">
+      <button class="tabbtn active" data-tab="brush">Brush</button>
+      <button class="tabbtn" data-tab="color">Color</button>
+      <button class="tabbtn" data-tab="turb">Turbulence</button>
+      <button class="tabbtn" data-tab="sensors">Sensors</button>
+      <button class="tabbtn" data-tab="bounds">Bounds</button>
+      <button class="tabbtn" data-tab="visuals">Visuals</button>
+      <button class="tabbtn" data-tab="system">System</button>
+    </div>
 
-      <div class="control">
-        <label>Brush type
-          <select id="brushType">
-            <option value="stroke" selected>Stroke (solid)</option>
-            <option value="dots">Dots</option>
-            <option value="spray">Spray</option>
-          </select>
-        </label>
-
-        <div id="strokeBlock">
-          <label>Width mode
-            <select id="widthMode">
-              <option value="constant" selected>Constant</option>
-              <option value="speed">Speed-based</option>
+    <div class="tabcontent active" id="tab-brush">
+      <div class="section">
+        <div class="control">
+          <label>Brush type
+            <select id="brushType">
+              <option value="stroke" selected>Stroke (solid)</option>
+              <option value="dots">Dots</option>
+              <option value="spray">Spray</option>
             </select>
           </label>
-          <label>Min width <span id="widthMinVal"></span></label>
-          <input type="range" id="widthMin" min="1" max="40" step="1" value="2" />
-          <label>Max width <span id="widthMaxVal"></span></label>
-          <input type="range" id="widthMax" min="2" max="80" step="1" value="18" />
-          <label id="widthRangeLabel" style="display:none;">Width range (px/s) <span id="widthRangeVal"></span></label>
-          <input type="range" id="widthRange" min="100" max="3000" step="10" value="1200" style="display:none;" />
-          <label>Stroke opacity <span id="strokeAlphaVal"></span></label>
-          <input type="range" id="strokeAlpha" min="0.2" max="1" step="0.01" value="0.95" />
-          <label>Stroke detail <span id="strokeDetailVal"></span></label>
-          <input type="range" id="strokeDetail" min="0.5" max="3" step="0.05" value="1.4" />
-          <label>Line cap
-            <select id="lineCap">
-              <option value="round" selected>Round</option>
-              <option value="butt">Butt</option>
-              <option value="square">Square</option>
+
+          <div id="strokeBlock">
+            <label>Width mode
+              <select id="widthMode">
+                <option value="constant" selected>Constant</option>
+                <option value="speed">Speed-based</option>
+              </select>
+            </label>
+            <label>Min width <span id="widthMinVal"></span></label>
+            <input type="range" id="widthMin" min="1" max="40" step="1" value="2" />
+            <label>Max width <span id="widthMaxVal"></span></label>
+            <input type="range" id="widthMax" min="2" max="80" step="1" value="18" />
+            <label id="widthRangeLabel" style="display:none;">Width range (px/s) <span id="widthRangeVal"></span></label>
+            <input type="range" id="widthRange" min="100" max="3000" step="10" value="1200" style="display:none;" />
+            <label>Stroke opacity <span id="strokeAlphaVal"></span></label>
+            <input type="range" id="strokeAlpha" min="0.2" max="1" step="0.01" value="0.95" />
+            <label>Stroke detail <span id="strokeDetailVal"></span></label>
+            <input type="range" id="strokeDetail" min="0.5" max="3" step="0.05" value="1.4" />
+            <label>Line cap
+              <select id="lineCap">
+                <option value="round" selected>Round</option>
+                <option value="butt">Butt</option>
+                <option value="square">Square</option>
+              </select>
+            </label>
+            <label>Line join
+              <select id="lineJoin">
+                <option value="round" selected>Round</option>
+                <option value="bevel">Bevel</option>
+                <option value="miter">Miter</option>
+              </select>
+            </label>
+          </div>
+
+          <div id="dotsBlock" style="display:none;">
+            <label>Dot size (Brush size) <span id="sizeVal"></span></label>
+            <input type="range" id="size" min="1" max="100" step="1" value="30" />
+          </div>
+
+          <label>Glow (off by default) <span id="glowVal"></span></label>
+          <input type="range" id="glow" min="0" max="70" step="1" value="0" />
+        </div>
+
+        <div class="control">
+          <label>Symmetry slices <span id="symVal"></span></label>
+          <input type="range" id="sym" min="1" max="24" step="1" value="10" />
+          <div class="row">
+            <button id="mirror" class="btn pill">Mirror</button>
+            <button id="kaleido" class="btn pill active">Kaleido</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabcontent" id="tab-color">
+      <div class="section">
+        <div class="control">
+          <label>Palette
+            <select id="palette">
+              <option>Rainbow</option>
+              <option>Neon</option>
+              <option>Sunset</option>
+              <option>Ocean</option>
+              <option>Acid</option>
             </select>
           </label>
-          <label>Line join
-            <select id="lineJoin">
-              <option value="round" selected>Round</option>
-              <option value="bevel">Bevel</option>
-              <option value="miter">Miter</option>
+          <label>Color mode
+            <select id="colorMode">
+              <option value="palette" selected>Palette</option>
+              <option value="velocity">Velocity</option>
+              <option value="accel">Acceleration</option>
+              <option value="spin">Spin (gyro)</option>
+              <option value="direction">Direction</option>
+              <option value="heat">Heat</option>
             </select>
           </label>
-        </div>
-
-        <div id="dotsBlock" style="display:none;">
-          <label>Dot size (Brush size) <span id="sizeVal"></span></label>
-          <input type="range" id="size" min="1" max="100" step="1" value="30" />
-        </div>
-
-        <label>Glow (off by default) <span id="glowVal"></span></label>
-        <input type="range" id="glow" min="0" max="70" step="1" value="0" />
-      </div>
-
-      <div class="control">
-        <label>Symmetry slices <span id="symVal"></span></label>
-        <input type="range" id="sym" min="1" max="24" step="1" value="10" />
-        <div class="row">
-          <button id="mirror" class="btn pill">Mirror</button>
-          <button id="kaleido" class="btn pill active">Kaleido</button>
+          <label id="metricRangeLabel">Metric range <span id="metricRangeVal"></span></label>
+          <input type="range" id="metricRange" min="1" max="600" step="1" value="180" />
+          <div id="heatControls">
+            <label>Heat gain <span id="heatGainVal"></span></label>
+            <input type="range" id="heatGain" min="0" max="2" step="0.02" value="0.6" />
+            <label>Heat decay <span id="heatDecayVal"></span></label>
+            <input type="range" id="heatDecay" min="0" max="1" step="0.01" value="0.14" />
+          </div>
+          <label>Color speed <span id="colorSpeedVal"></span></label>
+          <input type="range" id="colorSpeed" min="0" max="1.2" step="0.01" value="0.48" />
+          <div class="row">
+            <button id="lockColor" class="btn pill">Lock color per segment</button>
+          </div>
         </div>
       </div>
+    </div>
 
-      <div class="control">
-        <label>Trail fade <span id="fadeVal"></span></label>
-        <input type="range" id="fade" min="0" max="0.25" step="0.005" value="0.035" />
-        <label>Scatter <span id="scatterVal"></span></label>
-        <input type="range" id="scatter" min="0" max="1" step="0.01" value="0.2" />
-      </div>
-
-      <div class="control">
-        <label>Turbulence mode
-          <select id="turbMode">
-            <option value="off">Off</option>
-            <option value="noise">Noise</option>
-            <option value="curl" selected>Curl</option>
-          </select>
-        </label>
-        <label>Intensity <span id="turbIntVal"></span></label>
-        <input type="range" id="turbInt" min="0" max="1.2" step="0.01" value="0.65" />
-        <label>Scale <span id="turbScaleVal"></span></label>
-        <input type="range" id="turbScale" min="0.001" max="0.03" step="0.001" value="0.009" />
-        <label>Flow speed <span id="turbSpeedVal"></span></label>
-        <input type="range" id="turbSpeed" min="0" max="2" step="0.01" value="0.6" />
-      </div>
-
-      <div class="control">
-        <label>Sensor mode
-          <select id="sensorMode">
-            <option value="off">Off</option>
-            <option value="tilt">Tilt (stable map)</option>
-            <option value="motion">Motion (inertial)</option>
-            <option value="motion-swirl">Motion + Gyro swirl</option>
-            <option value="gyro-orbit">Gyro orbit</option>
-          </select>
-        </label>
-        <label>Sensor influence <span id="sensorInfVal"></span></label>
-        <input type="range" id="sensorInf" min="0" max="1" step="0.01" value="0.7" />
-        <label>Motion sensitivity <span id="motionSensVal"></span></label>
-        <input type="range" id="motionSens" min="0.2" max="3" step="0.05" value="1.2" />
-        <label>Friction <span id="frictionVal"></span></label>
-        <input type="range" id="friction" min="0.80" max="0.98" step="0.01" value="0.93" />
-        <label>Deadzone <span id="deadzoneVal"></span></label>
-        <input type="range" id="deadzone" min="0" max="0.3" step="0.01" value="0.06" />
-      </div>
-
-      <div class="control">
-        <label>Min draw speed <span id="minDrawVal"></span></label>
-        <input type="range" id="minDraw" min="0" max="0.5" step="0.01" value="0.08" />
-        <label>Filter strength <span id="filterVal"></span></label>
-        <input type="range" id="filter" min="0" max="0.95" step="0.01" value="0.7" />
-        <label>Region
-          <select id="boundsRegion">
-            <option value="screen" selected>Screen</option>
-            <option value="circle">Circle (center)</option>
-            <option value="rect">Rect (center)</option>
-          </select>
-        </label>
-        <label>Behavior
-          <select id="boundsBehavior">
-            <option value="wrap">Wrap</option>
-            <option value="bounce" selected>Bounce</option>
-            <option value="clamp">Clamp</option>
-          </select>
-        </label>
-        <label>Circle radius (%) <span id="circleRadiusVal"></span></label>
-        <input type="range" id="circleRadius" min="20" max="100" step="1" value="68" />
-        <label>Rect width (%) <span id="rectWVal"></span></label>
-        <input type="range" id="rectW" min="20" max="100" step="1" value="72" />
-        <label>Rect height (%) <span id="rectHVal"></span></label>
-        <input type="range" id="rectH" min="20" max="100" step="1" value="60" />
-        <label>Edge padding <span id="edgePadVal"></span></label>
-        <input type="range" id="edgePad" min="0" max="40" step="1" value="0" />
-        <div class="row">
-          <button id="useLinear" class="btn pill active">Linear Accel</button>
-          <button id="shakeClear" class="btn pill">Shake clears</button>
-          <button id="sensorDraw" class="btn pill active">Sensor draws</button>
-          <button id="showBounds" class="btn pill">Show bounds</button>
-        </div>
-        <div class="row">
-          <button id="calibrate" class="btn pill">Calibrate</button>
-          <button id="center" class="btn pill">Center Brush</button>
+    <div class="tabcontent" id="tab-turb">
+      <div class="section">
+        <div class="control">
+          <label>Turbulence mode
+            <select id="turbMode">
+              <option value="off">Off</option>
+              <option value="noise">Noise</option>
+              <option value="curl" selected>Curl</option>
+            </select>
+          </label>
+          <label>Intensity <span id="turbIntVal"></span></label>
+          <input type="range" id="turbInt" min="0" max="1.2" step="0.01" value="0.65" />
+          <label>Scale <span id="turbScaleVal"></span></label>
+          <input type="range" id="turbScale" min="0.001" max="0.03" step="0.001" value="0.009" />
+          <label>Flow speed <span id="turbSpeedVal"></span></label>
+          <input type="range" id="turbSpeed" min="0" max="2" step="0.01" value="0.6" />
         </div>
       </div>
+    </div>
 
-      <div class="control">
-        <label>Background
-          <select id="bgMode">
-            <option value="dark">Dark</option>
-            <option value="deep">Deep Gradient</option>
-            <option value="light">Light</option>
-          </select>
-        </label>
-        <div class="row">
-          <button id="composite" class="btn pill active">Additive</button>
-          <button id="randomize" class="btn pill">Randomize</button>
+    <div class="tabcontent" id="tab-sensors">
+      <div class="section">
+        <div class="control">
+          <label>Sensor mode
+            <select id="sensorMode">
+              <option value="off">Off</option>
+              <option value="tilt">Tilt (stable map)</option>
+              <option value="motion">Motion (inertial)</option>
+              <option value="motion-swirl">Motion + Gyro swirl</option>
+              <option value="motion-raw">Motion Raw (very responsive)</option>
+              <option value="tilt-spring">Tilt Spring (spring-damper)</option>
+              <option value="gyro-orbit">Gyro orbit</option>
+              <option value="shake-burst">Shake Burst</option>
+            </select>
+          </label>
+          <label>Sensor influence <span id="sensorInfVal"></span></label>
+          <input type="range" id="sensorInf" min="0" max="1" step="0.01" value="0.7" />
+          <label>Motion sensitivity <span id="motionSensVal"></span></label>
+          <input type="range" id="motionSens" min="0.2" max="6" step="0.05" value="2.2" />
+          <label>Amp <span id="ampVal"></span></label>
+          <input type="range" id="amp" min="0.3" max="5" step="0.05" value="1.6" />
+          <label>Speed cap (px/s) <span id="speedCapVal"></span></label>
+          <input type="range" id="speedCap" min="300" max="4000" step="10" value="1600" />
+          <label>Friction <span id="frictionVal"></span></label>
+          <input type="range" id="friction" min="0.60" max="0.98" step="0.01" value="0.92" />
+          <label>Deadzone <span id="deadzoneVal"></span></label>
+          <input type="range" id="deadzone" min="0" max="0.3" step="0.01" value="0.06" />
+        </div>
+
+        <div class="control">
+          <label>Spring K <span id="springKVal"></span></label>
+          <input type="range" id="springK" min="1" max="30" step="0.5" value="10" />
+          <label>Damping <span id="springDVal"></span></label>
+          <input type="range" id="springD" min="0.6" max="0.98" step="0.01" value="0.88" />
+          <label>Spin gain <span id="spinGainVal"></span></label>
+          <input type="range" id="spinGain" min="0" max="3" step="0.05" value="1.2" />
+          <label>Min draw speed <span id="minDrawVal"></span></label>
+          <input type="range" id="minDraw" min="0" max="0.5" step="0.01" value="0.08" />
+          <label>Filter strength <span id="filterVal"></span></label>
+          <input type="range" id="filter" min="0" max="0.95" step="0.01" value="0.4" />
+          <div class="row">
+            <button id="useLinear" class="btn pill active">Linear Accel</button>
+            <button id="shakeClear" class="btn pill">Shake clears</button>
+            <button id="sensorDraw" class="btn pill active">Sensor draws</button>
+            <button id="showBrushBtn" class="btn pill active">Show brush</button>
+            <button id="calibrate" class="btn pill">Calibrate</button>
+            <button id="center" class="btn pill">Center Brush</button>
+          </div>
         </div>
       </div>
+    </div>
 
-      <div class="control">
-        <label>Quality
-          <select id="quality">
-            <option value="performance">Performance</option>
-            <option value="balanced" selected>Balanced</option>
-            <option value="high">High</option>
-          </select>
-        </label>
-        <div class="row">
-          <button id="resetView" class="btn pill">Reset</button>
+    <div class="tabcontent" id="tab-bounds">
+      <div class="section">
+        <div class="control">
+          <label>Region
+            <select id="boundsRegion">
+              <option value="screen" selected>Screen</option>
+              <option value="circle">Circle (center)</option>
+              <option value="rect">Rect (center)</option>
+            </select>
+          </label>
+          <label>Behavior
+            <select id="boundsBehavior">
+              <option value="wrap">Wrap</option>
+              <option value="bounce" selected>Bounce</option>
+              <option value="clamp">Clamp</option>
+            </select>
+          </label>
+          <label>Circle radius (%) <span id="circleRadiusVal"></span></label>
+          <input type="range" id="circleRadius" min="20" max="100" step="1" value="68" />
+          <label>Rect width (%) <span id="rectWVal"></span></label>
+          <input type="range" id="rectW" min="20" max="100" step="1" value="72" />
+          <label>Rect height (%) <span id="rectHVal"></span></label>
+          <input type="range" id="rectH" min="20" max="100" step="1" value="60" />
+          <label>Edge padding <span id="edgePadVal"></span></label>
+          <input type="range" id="edgePad" min="0" max="40" step="1" value="0" />
+          <div class="row">
+            <button id="clipDraw" class="btn pill active">Clip draw to bounds</button>
+            <button id="showBounds" class="btn pill">Show bounds</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabcontent" id="tab-visuals">
+      <div class="section">
+        <div class="control">
+          <label>Trail fade <span id="fadeVal"></span></label>
+          <input type="range" id="fade" min="0" max="0.25" step="0.005" value="0.035" />
+          <label>Scatter <span id="scatterVal"></span></label>
+          <input type="range" id="scatter" min="0" max="1" step="0.01" value="0.2" />
+        </div>
+        <div class="control">
+          <label>Background
+            <select id="bgMode">
+              <option value="dark">Dark</option>
+              <option value="deep">Deep Gradient</option>
+              <option value="light">Light</option>
+            </select>
+          </label>
+          <div class="row">
+            <button id="composite" class="btn pill active">Additive</button>
+            <button id="randomize" class="btn pill">Randomize</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabcontent" id="tab-system">
+      <div class="section">
+        <div class="control">
+          <label>Quality
+            <select id="quality">
+              <option value="performance">Performance</option>
+              <option value="balanced" selected>Balanced</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+          <div class="row">
+            <button id="resetView" class="btn pill">Reset</button>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="legend" id="legend">Solid strokes • Center bounds: circle/rect with wrap/bounce/clamp • Motion modes paint hands-free</div>
+  <div class="legend" id="legend">Try Motion Raw or Tilt Spring if Motion feels weak • Amp and Speed Cap boost responsiveness</div>
 
   <div class="bottombar">
     <button id="clearBtn" class="fab secondary">Clear</button>
@@ -373,13 +451,22 @@
 
     // sensors
     sensorsEnabled: false,
-    sensorMode: 'off', // 'off'|'tilt'|'motion'|'motion-swirl'|'gyro-orbit'
+    sensorMode: 'off', // 'off'|'tilt'|'motion'|'motion-swirl'|'motion-raw'|'tilt-spring'|'gyro-orbit'|'shake-burst'
     sensorInf: 0.7,
-    motionSens: 1.2,
-    friction: 0.93,
+    motionSens: 2.2,
+    amp: 1.6,
+    speedCap: 1600, // px/s
+    friction: 0.92,
     deadzone: 0.06,
     minDrawSpeed: 0.08,
-    filterStrength: 0.7,
+    filterStrength: 0.4,
+    springK: 10,
+    springD: 0.88,
+    spinGain: 1.2,
+    useLinear: true,
+    shakeClears: false,
+    sensorDraws: true,
+    showBrush: true,
 
     // bounds
     boundsRegion: 'screen',         // 'screen'|'circle'|'rect'
@@ -389,20 +476,19 @@
     rectHpct: 60,                   // % of screen height
     edgePad: 0,
     showBounds: false,
+    clipDraw: true,
 
-    useLinear: true,
-    shakeClears: false,
-    sensorDraws: true,
-
+    // device signals
     tiltX: 0, tiltY: 0, yaw: 0, yawBias: 0,
     accelMag: 0,
-    ax: 0, ay: 0, az: 0,
-    gx: 0, gy: 0, gz: 0,
+    ax: 0, ay: 0, az: 0,         // linear accel filtered or gravity depending toggle
+    rawAx: 0, rawAy: 0,          // including-gravity (raw-ish) filtered lightly
     rot: { alpha: 0, beta: 0, gamma: 0 },
     rotMag: 0,
 
     // sensor painter
-    sensor: { x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, inited: false },
+    sensor: { x: 0, y: 0, vx: 0, vy: 0, lastX: 0, lastY: 0, inited: false, _orbitR: 0, _orbitA: 0 },
+    _lastBurst: 0,
 
     // input pointers
     pointers: new Map(),
@@ -414,6 +500,18 @@
     // perf
     quality: 'balanced',
   };
+
+  // Tabs
+  const panel = document.getElementById('panel');
+  const tabs = document.getElementById('tabs');
+  tabs.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.tabbtn'); if (!btn) return;
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.tabbtn').forEach(b=>b.classList.toggle('active', b===btn));
+    document.querySelectorAll('.tabcontent').forEach(c=>{
+      c.classList.toggle('active', c.id === 'tab-' + tab);
+    });
+  });
 
   // Utils
   const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
@@ -474,7 +572,7 @@
   }
 
   // Color modes
-  function hueFromVal(val){ return 220 - 220*val; } // 1->red, 0->blue
+  function hueFromVal(val){ return 220 - 220*val; }
   function colorFromVal(val, scheme='hue'){
     val = clamp(val, 0, 1);
     if (scheme === 'fire'){
@@ -517,7 +615,7 @@
     return getPaletteColor(state.palette, baseT, x, y);
   }
 
-  // Resize
+  // Resize + background
   function resize(preserve=false){
     let prevBitmap = null;
     if (preserve && canvas.transferToImageBitmap){
@@ -534,11 +632,12 @@
     state.width = w; state.height = h;
     state.cx = w/2; state.cy = h/2;
     paintBackground(true);
-
+    // reset sensor center if needed
     if (!state.sensor.inited) {
       state.sensor.x = state.cx; state.sensor.y = state.cy;
       state.sensor.lastX = state.cx; state.sensor.lastY = state.cy;
     }
+    updateClipPath();
     if (preserve && prevBitmap){
       ctx.save(); ctx.globalCompositeOperation = 'source-over';
       ctx.imageSmoothingQuality = 'high';
@@ -599,13 +698,58 @@
     return { x: state.cx + rx, y: state.cy + ry };
   }
 
+  // Bounds clipping (Path2D cache)
+  let clipCache = { path: null, key: '' };
+  function clipKey(){
+    return [
+      state.boundsRegion, state.edgePad, state.circleRadiusPct, state.rectWpct, state.rectHpct,
+      state.width, state.height
+    ].join('|');
+  }
+  function updateClipPath(){
+    const key = clipKey();
+    if (clipCache.key === key) return;
+    clipCache.key = key;
+
+    const pad = state.edgePad;
+    const p = new Path2D();
+    if (state.boundsRegion === 'screen'){
+      p.rect(0+pad, 0+pad, state.width - pad*2, state.height - pad*2);
+    } else if (state.boundsRegion === 'circle'){
+      const R = (Math.min(state.width, state.height) * 0.5) * (state.circleRadiusPct/100) - pad;
+      p.arc(state.cx, state.cy, Math.max(5, R), 0, Math.PI*2);
+    } else {
+      const rw = (state.rectWpct/100) * state.width * 0.5 - pad;
+      const rh = (state.rectHpct/100) * state.height * 0.5 - pad;
+      p.rect(state.cx - rw, state.cy - rh, rw*2, rh*2);
+    }
+    clipCache.path = p;
+  }
+  function isClipNeeded(){
+    if (!state.clipDraw) return false;
+    if (state.boundsRegion === 'screen' && state.edgePad === 0) return false;
+    return true;
+  }
+  function withClipDraw(fn){
+    if (!isClipNeeded()){
+      fn();
+      return;
+    }
+    ctx.save();
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.beginPath();
+    ctx.clip(clipCache.path);
+    fn();
+    ctx.restore();
+  }
+
   // Teleport guard
   function safeSymmetricSegment(a, b){
     const dt = Math.abs((b.t||0) - (a.t||0)) || 0;
     const dist = Math.hypot((b.x-a.x), (b.y-a.y));
     const MAX_SEG = Math.min(state.width, state.height) * 0.35;
     if (dt > 180 || dist > MAX_SEG) return; // skip
-    drawSymmetricSegment(a, b, dt, dist);
+    withClipDraw(()=> drawSymmetricSegment(a, b, dt, dist));
   }
 
   function drawSymmetricSegment(a, b, dt=16, dist=null){
@@ -633,7 +777,7 @@
 
   function drawByBrush(a, b, dt=16, dist=null){
     if (state.brush === 'stroke') drawStrokeSegment(a, b, dt, dist);
-    else drawDottySegment(a, b, dt, dist, state.brush); // 'dots' or 'spray'
+    else drawDottySegment(a, b, dt, dist, state.brush);
   }
 
   // Solid stroke segment
@@ -647,7 +791,6 @@
     const segSpeed = dist / dtms; // px/ms
     const segDir = Math.atan2(dy, dx);
 
-    // stroke width
     let w = state.stroke.widthMax;
     if (state.stroke.widthMode === 'speed'){
       const speed_ps = segSpeed * 1000;
@@ -669,7 +812,6 @@
     const steps = Math.max(1, Math.ceil(dist / Math.max(1, baseStep)));
     let x0 = a.x, y0 = a.y;
 
-    // Precompute locked color path if enabled (one stroke call)
     if (state.stroke.lockColor){
       const lockedColor = getStrokeColor(a.x, a.y, segSpeed, segDir, tNow, 0, dist);
       ctx.strokeStyle = lockedColor;
@@ -694,7 +836,6 @@
       }
       ctx.stroke();
     } else {
-      // Dynamic color per mini segment
       for (let i=1; i<=steps; i++){
         const f = i/steps;
         let x = lerp(a.x, b.x, f);
@@ -722,7 +863,6 @@
         x0 = x; y0 = y;
       }
     }
-
     ctx.restore();
   }
 
@@ -805,11 +945,11 @@
       a.x += a.vx * sp * dt*0.06;
       a.y += a.vy * sp * dt*0.06;
       bound(a);
-      safeSymmetricSegment(old, {x:a.x, y:a.y, t:t});
+      withClipDraw(()=> safeSymmetricSegment(old, {x:a.x, y:a.y, t:t}));
     }
   }
 
-  // Bounds
+  // Bounds logic (clear differences for wrap/bounce/clamp)
   function bound(p){
     const pad = state.edgePad;
     const w = state.width, h = state.height;
@@ -819,18 +959,21 @@
 
     if (region === 'screen'){
       if (behavior === 'wrap'){
-        if (p.x < 0 - pad) { p.x = w + pad; }
-        if (p.x > w + pad) { p.x = 0 - pad; }
-        if (p.y < 0 - pad) { p.y = h + pad; }
-        if (p.y > h + pad) { p.y = 0 - pad; }
+        if (p.x < 0 - pad) { p.x = w - 1 - pad; }
+        if (p.x > w + pad) { p.x = 0 + 1 + pad; }
+        if (p.y < 0 - pad) { p.y = h - 1 - pad; }
+        if (p.y > h + pad) { p.y = 0 + 1 + pad; }
       } else if (behavior === 'bounce'){
-        if (p.x < 0 + pad){ p.x = 0 + pad; p.vx = -p.vx*0.9; }
-        if (p.x > w - pad){ p.x = w - pad; p.vx = -p.vx*0.9; }
-        if (p.y < 0 + pad){ p.y = 0 + pad; p.vy = -p.vy*0.9; }
-        if (p.y > h - pad){ p.y = h - pad; p.vy = -p.vy*0.9; }
+        if (p.x < 0 + pad){ p.x = 0 + pad; p.vx = -p.vx; }
+        if (p.x > w - pad){ p.x = w - pad; p.vx = -p.vx; }
+        if (p.y < 0 + pad){ p.y = 0 + pad; p.vy = -p.vy; }
+        if (p.y > h - pad){ p.y = h - pad; p.vy = -p.vy; }
+        p.vx *= 0.9; p.vy *= 0.9;
       } else {
-        p.x = clamp(p.x, 0 + pad, w - pad);
-        p.y = clamp(p.y, 0 + pad, h - pad);
+        if (p.x < 0 + pad){ p.x = 0 + pad; p.vx = 0; }
+        if (p.x > w - pad){ p.x = w - pad; p.vx = 0; }
+        if (p.y < 0 + pad){ p.y = 0 + pad; p.vy = 0; }
+        if (p.y > h - pad){ p.y = h - pad; p.vy = 0; }
       }
       return;
     }
@@ -844,21 +987,22 @@
 
       if (r > rLimit){
         if (behavior === 'wrap'){
-          // Teleport across center to opposite boundary
-          p.x = cx - nx * (rLimit - 0.001);
-          p.y = cy - ny * (rLimit - 0.001);
+          // Teleport to opposite edge along same ray, keep velocity
+          p.x = cx - nx * (rLimit - 1);
+          p.y = cy - ny * (rLimit - 1);
         } else if (behavior === 'bounce'){
-          // Place on boundary and reflect velocity across normal
+          // Reflect velocity across normal
           p.x = cx + nx * rLimit;
           p.y = cy + ny * rLimit;
           const vdotn = (p.vx||0)*nx + (p.vy||0)*ny;
-          p.vx = (p.vx || 0) - 2*vdotn*nx; p.vx *= 0.9;
-          p.vy = (p.vy || 0) - 2*vdotn*ny; p.vy *= 0.9;
-        } else { // clamp
+          p.vx = (p.vx || 0) - 2*vdotn*nx;
+          p.vy = (p.vy || 0) - 2*vdotn*ny;
+          p.vx *= 0.9; p.vy *= 0.9;
+        } else {
+          // Clamp and stop
           p.x = cx + nx * rLimit;
           p.y = cy + ny * rLimit;
-          // optionally damp velocity slightly to avoid jitter
-          p.vx *= 0.8; p.vy *= 0.8;
+          p.vx = 0; p.vy = 0;
         }
       }
       return;
@@ -871,19 +1015,21 @@
       const yMin = cy - rh + pad, yMax = cy + rh - pad;
 
       if (behavior === 'wrap'){
-        if (p.x < xMin) { p.x = xMax; }
-        if (p.x > xMax) { p.x = xMin; }
-        if (p.y < yMin) { p.y = yMax; }
-        if (p.y > yMax) { p.y = yMin; }
+        if (p.x < xMin) { p.x = xMax - 1; }
+        if (p.x > xMax) { p.x = xMin + 1; }
+        if (p.y < yMin) { p.y = yMax - 1; }
+        if (p.y > yMax) { p.y = yMin + 1; }
       } else if (behavior === 'bounce'){
-        if (p.x < xMin){ p.x = xMin; p.vx = -p.vx*0.9; }
-        if (p.x > xMax){ p.x = xMax; p.vx = -p.vx*0.9; }
-        if (p.y < yMin){ p.y = yMin; p.vy = -p.vy*0.9; }
-        if (p.y > yMax){ p.y = yMax; p.vy = -p.vy*0.9; }
+        if (p.x < xMin){ p.x = xMin; p.vx = -p.vx; }
+        if (p.x > xMax){ p.x = xMax; p.vx = -p.vx; }
+        if (p.y < yMin){ p.y = yMin; p.vy = -p.vy; }
+        if (p.y > yMax){ p.y = yMax; p.vy = -p.vy; }
+        p.vx *= 0.9; p.vy *= 0.9;
       } else {
-        p.x = clamp(p.x, xMin, xMax);
-        p.y = clamp(p.y, yMin, yMax);
-        p.vx *= 0.8; p.vy *= 0.8;
+        if (p.x < xMin){ p.x = xMin; p.vx = 0; }
+        if (p.x > xMax){ p.x = xMax; p.vx = 0; }
+        if (p.y < yMin){ p.y = yMin; p.vy = 0; }
+        if (p.y > yMax){ p.y = yMax; p.vy = 0; }
       }
       return;
     }
@@ -915,6 +1061,32 @@
     ctx.restore();
   }
 
+  function drawBrushOverlay(){
+    if (!state.showBrush || state.sensorMode === 'off') return;
+    const p = state.sensor;
+    ctx.save();
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    // dot
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+    ctx.fill();
+    // velocity arrow
+    const vx = p.vx || 0, vy = p.vy || 0;
+    const sp = Math.hypot(vx, vy);
+    if (sp > 0.01){
+      const len = Math.min(24, sp*0.15);
+      const ang = Math.atan2(vy, vx);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + Math.cos(ang)*len, p.y + Math.sin(ang)*len);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // Sensor painter
   function getScreenAngleRad(){
     const o = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (window.orientation || 0);
@@ -931,8 +1103,9 @@
     }
 
     const dtSec = Math.max(0.001, dt * 0.001);
-    const rotZ = state.rot.alpha || 0; // deg/s
+    const rotZ = state.rot.alpha || 0; // deg/s (approx yaw-ish)
     const ang = -getScreenAngleRad();
+    const gScale = Math.min(state.width, state.height) / 400; // scale to screen
 
     if (state.sensorMode === 'tilt'){
       const reach = 0.46;
@@ -945,43 +1118,104 @@
       p.x += f.x * state.turbInt * 8 * dtSec;
       p.y += f.y * state.turbInt * 8 * dtSec;
       bound(p);
-    } else if (state.sensorMode === 'motion' || state.sensorMode === 'motion-swirl'){
-      const rx = state.ax * Math.cos(ang) - state.ay * Math.sin(ang);
-      const ry = state.ax * Math.sin(ang) + state.ay * Math.cos(ang);
+
+    } else if (state.sensorMode === 'tilt-spring'){
+      const reach = 0.6;
+      const tx = state.cx + (state.tiltX * state.width * reach);
+      const ty = state.cy + (state.tiltY * state.height * reach);
+      const k = state.springK * gScale * (0.8 + state.sensorInf);
+      const dmp = state.springD;
+      p.vx += (tx - p.x) * k * dtSec;
+      p.vy += (ty - p.y) * k * dtSec;
+      p.vx *= dmp; p.vy *= dmp;
+      // add mild flow
+      const f = flowVec(p.x, p.y, now*0.001);
+      p.vx += f.x * state.turbInt * 10 * dtSec;
+      p.vy += f.y * state.turbInt * 10 * dtSec;
+
+      // cap per-second speed
+      capSpeed(p, dtSec);
+      p.x += p.vx; p.y += p.vy;
+      bound(p);
+
+    } else if (state.sensorMode === 'motion' || state.sensorMode === 'motion-swirl' || state.sensorMode === 'motion-raw'){
+      // Choose accel source
+      let ax = state.ax, ay = state.ay;
+      if (state.sensorMode === 'motion-raw'){ ax = state.rawAx; ay = state.rawAy; }
+      // rotate device axes to screen coords
+      const rx = ax * Math.cos(ang) - ay * Math.sin(ang);
+      const ry = ax * Math.sin(ang) + ay * Math.cos(ang);
       const mag = Math.hypot(rx, ry);
       const dz = state.deadzone;
-      const gain = 45 * state.motionSens * (0.5 + state.sensorInf);
-      const driveX = (mag > dz ? (rx / (mag || 1)) * (mag - dz) : 0) * gain;
-      const driveY = (mag > dz ? (ry / (mag || 1)) * (mag - dz) : 0) * gain;
-      p.vx += driveX * dtSec; p.vy += driveY * dtSec;
+      // adaptive gain
+      const gain = state.motionSens * state.amp * gScale * 60;
+      const driveX = (mag > dz ? (rx / (mag || 1)) * (mag - dz) : 0) * gain * dtSec;
+      const driveY = (mag > dz ? (ry / (mag || 1)) * (mag - dz) : 0) * gain * dtSec;
+      p.vx += driveX; p.vy += driveY;
 
+      // Flow + optional gyro swirl
       const f = flowVec(p.x, p.y, now*0.001);
       let swirl = 0;
-      if (state.sensorMode === 'motion-swirl'){ swirl = clamp(rotZ/180, -2, 2) * state.sensorInf; }
-      p.vx += f.x * state.turbInt * (16 + Math.abs(swirl)*10) * dtSec;
-      p.vy += f.y * state.turbInt * (16 + Math.abs(swirl)*10) * dtSec;
+      if (state.sensorMode !== 'motion-raw' && state.sensorMode !== 'motion'){
+        swirl = clamp((rotZ/180) * state.spinGain, -4, 4);
+      }
+      p.vx += f.x * state.turbInt * (14 + Math.abs(swirl)*10) * dtSec;
+      p.vy += f.y * state.turbInt * (14 + Math.abs(swirl)*10) * dtSec;
       if (swirl !== 0){
         const s = Math.sin(swirl * dtSec), c = Math.cos(swirl * dtSec);
         const vx = p.vx*c - p.vy*s, vy = p.vx*s + p.vy*c;
         p.vx = vx; p.vy = vy;
       }
+
+      // friction, cap, move
       p.vx *= state.friction; p.vy *= state.friction;
+      capSpeed(p, dtSec);
       p.x += p.vx; p.y += p.vy;
       bound(p);
+
     } else if (state.sensorMode === 'gyro-orbit'){
-      const angleSpeed = (rotZ/180) * (0.8 + state.sensorInf*1.6);
-      const rMax = Math.min(state.width, state.height)*0.38;
+      const angleSpeed = (rotZ/180) * (0.6 + state.sensorInf*1.2) * state.spinGain;
+      const rMax = Math.min(state.width, state.height)*0.42;
       const rTarget = clamp((state.accelMag - 3)/7, 0, 1) * rMax;
       p._orbitR = lerp(p._orbitR || (rMax*0.25), rTarget, 1 - Math.pow(1-0.25, dtSec*60));
       p._orbitA = (p._orbitA || 0) + angleSpeed * dtSec * Math.PI*2;
       const tx = state.cx + Math.cos(p._orbitA)*p._orbitR;
       const ty = state.cy + Math.sin(p._orbitA)*p._orbitR;
-      const smoothing = 1 - Math.pow(1 - 0.28, dtSec*60);
+      const smoothing = 1 - Math.pow(1 - 0.3, dtSec*60);
       p.x = lerp(p.x, tx, smoothing);
       p.y = lerp(p.y, ty, smoothing);
       bound(p);
+
+    } else if (state.sensorMode === 'shake-burst'){
+      // Like Motion, but bursts on high accel
+      const rx = state.ax * Math.cos(ang) - state.ay * Math.sin(ang);
+      const ry = state.ax * Math.sin(ang) + state.ay * Math.cos(ang);
+      const gain = state.motionSens * state.amp * gScale * 70;
+      p.vx += rx * gain * dtSec; p.vy += ry * gain * dtSec;
+
+      const f = flowVec(p.x, p.y, now*0.001);
+      p.vx += f.x * state.turbInt * 12 * dtSec;
+      p.vy += f.y * state.turbInt * 12 * dtSec;
+
+      // Burst kick
+      if (state.accelMag > 18){
+        const t = now;
+        if (t - state._lastBurst > 180){
+          state._lastBurst = t;
+          const angKick = Math.random()*Math.PI*2;
+          const kick = 200 * state.amp * dtSec;
+          p.vx += Math.cos(angKick)*kick;
+          p.vy += Math.sin(angKick)*kick;
+        }
+      }
+
+      p.vx *= state.friction; p.vy *= state.friction;
+      capSpeed(p, dtSec);
+      p.x += p.vx; p.y += p.vy;
+      bound(p);
     }
 
+    // Speed metric
     const speedPx = Math.hypot(p.x - p.lastX, p.y - p.lastY);
     const speed = speedPx / Math.max(1, dt); // px/ms
     state.sensorSpeed = speed;
@@ -991,10 +1225,20 @@
       const cur = { x: p.x, y: p.y, t: now };
       const d = Math.hypot(cur.x-old.x, cur.y-old.y);
       const MAX_SEG = Math.min(state.width, state.height) * 0.35;
-      if (d <= MAX_SEG) drawSymmetricSegment(old, cur, dt, d);
+      if (d <= MAX_SEG) withClipDraw(()=> drawSymmetricSegment(old, cur, dt, d));
       p.lastX = p.x; p.lastY = p.y;
     } else {
       p.lastX = p.x; p.lastY = p.y;
+    }
+  }
+
+  function capSpeed(p, dtSec){
+    const v = Math.hypot(p.vx, p.vy);
+    if (v <= 1e-6) return;
+    const vps = v / dtSec; // px/s
+    if (vps > state.speedCap){
+      const s = (state.speedCap * dtSec) / v;
+      p.vx *= s; p.vy *= s;
     }
   }
 
@@ -1033,8 +1277,9 @@
     // auto
     if (state.auto) stepAgents(dt);
 
-    // bounds overlay (on top)
+    // overlays
     drawBoundsOverlay();
+    drawBrushOverlay();
 
     requestAnimationFrame(tick);
   }
@@ -1074,29 +1319,41 @@
     state.tiltY = clamp(beta/45, -1, 1);
     state.yaw = alpha/180 - 1;
   }
-  const lp = { ax:0, ay:0, az:0, gx:0, gy:0, gz:0 };
+  const lp = { ax:0, ay:0, az:0, gx:0, gy:0, gz:0, rawx:0, rawy:0 };
   function onMotion(e){
     if (!state.sensorsEnabled) return;
     const inc = e.accelerationIncludingGravity || {x:0,y:0,z:0};
     const lin = e.acceleration || null;
     const r = e.rotationRate || { alpha:0, beta:0, gamma:0 };
 
+    // low-pass factor from UI
     const a = clamp(state.filterStrength, 0, 0.95);
+
+    // Including-gravity LP for gravity estimate
     lp.gx = a*lp.gx + (1-a)*(inc.x || 0);
     lp.gy = a*lp.gy + (1-a)*(inc.y || 0);
     lp.gz = a*lp.gz + (1-a)*(inc.z || 0);
 
+    // Linear accel (OS-provided else subtract gravity LP)
     const lax = (lin && isFinite(lin.x)) ? lin.x : (inc.x - lp.gx);
     const lay = (lin && isFinite(lin.y)) ? lin.y : (inc.y - lp.gy);
     const laz = (lin && isFinite(lin.z)) ? lin.z : (inc.z - lp.gz);
 
+    // LP linear accel for stability
     lp.ax = a*lp.ax + (1-a)*lax;
     lp.ay = a*lp.ay + (1-a)*lay;
     lp.az = a*lp.az + (1-a)*laz;
 
+    // Light LP raw including-gravity for "motion-raw"
+    const aRaw = 0.2;
+    lp.rawx = aRaw*lp.rawx + (1-aRaw)*(inc.x || 0);
+    lp.rawy = aRaw*lp.rawy + (1-aRaw)*(inc.y || 0);
+
     state.ax = state.useLinear ? lp.ax : lp.gx;
     state.ay = state.useLinear ? lp.ay : lp.gy;
     state.az = state.useLinear ? lp.az : lp.gz;
+    state.rawAx = lp.rawx;
+    state.rawAy = lp.rawy;
 
     const ai = e.accelerationIncludingGravity || {x:0,y:0,z:0};
     state.accelMag = Math.sqrt((ai.x||0)**2 + (ai.y||0)**2 + (ai.z||0)**2);
@@ -1104,8 +1361,7 @@
     state.rotMag = Math.sqrt((state.rot.alpha)**2 + (state.rot.beta)**2 + (state.rot.gamma)**2);
   }
 
-  // UI wiring
-  const panel = document.getElementById('panel');
+  // Controls/UI
   const menuBtn = document.getElementById('menuBtn');
   const saveBtn = document.getElementById('saveBtn');
   const clearBtn = document.getElementById('clearBtn');
@@ -1113,17 +1369,7 @@
   const sensorBtn = document.getElementById('sensorBtn');
   const hint = document.getElementById('hint');
 
-  const paletteEl = document.getElementById('palette');
-  const colorModeEl = document.getElementById('colorMode');
-  const metricRange = document.getElementById('metricRange');
-  const metricRangeVal = document.getElementById('metricRangeVal');
-  const metricRangeLabel = document.getElementById('metricRangeLabel');
-  const heatControls = document.getElementById('heatControls');
-  const heatGain = document.getElementById('heatGain'), heatGainVal = document.getElementById('heatGainVal');
-  const heatDecay = document.getElementById('heatDecay'), heatDecayVal = document.getElementById('heatDecayVal');
-  const colorSpeed = document.getElementById('colorSpeed'), colorSpeedVal = document.getElementById('colorSpeedVal');
-  const lockColor = document.getElementById('lockColor');
-
+  // Brush
   const brushType = document.getElementById('brushType');
   const strokeBlock = document.getElementById('strokeBlock');
   const dotsBlock = document.getElementById('dotsBlock');
@@ -1136,51 +1382,70 @@
   const strokeDetail = document.getElementById('strokeDetail'), strokeDetailVal = document.getElementById('strokeDetailVal');
   const lineCap = document.getElementById('lineCap');
   const lineJoin = document.getElementById('lineJoin');
-
   const size = document.getElementById('size'), sizeVal = document.getElementById('sizeVal');
   const glow = document.getElementById('glow'), glowVal = document.getElementById('glowVal');
 
+  // Symmetry
   const sym = document.getElementById('sym'), symVal = document.getElementById('symVal');
   const mirror = document.getElementById('mirror'), kaleido = document.getElementById('kaleido');
 
-  const fade = document.getElementById('fade'), fadeVal = document.getElementById('fadeVal');
-  const scatter = document.getElementById('scatter'), scatterVal = document.getElementById('scatterVal');
+  // Color
+  const paletteEl = document.getElementById('palette');
+  const colorModeEl = document.getElementById('colorMode');
+  const metricRange = document.getElementById('metricRange');
+  const metricRangeVal = document.getElementById('metricRangeVal');
+  const metricRangeLabel = document.getElementById('metricRangeLabel');
+  const heatControls = document.getElementById('heatControls');
+  const heatGain = document.getElementById('heatGain'), heatGainVal = document.getElementById('heatGainVal');
+  const heatDecay = document.getElementById('heatDecay'), heatDecayVal = document.getElementById('heatDecayVal');
+  const colorSpeed = document.getElementById('colorSpeed'), colorSpeedVal = document.getElementById('colorSpeedVal');
+  const lockColor = document.getElementById('lockColor');
 
+  // Turbulence
   const turbMode = document.getElementById('turbMode');
   const turbInt = document.getElementById('turbInt'), turbIntVal = document.getElementById('turbIntVal');
   const turbScale = document.getElementById('turbScale'), turbScaleVal = document.getElementById('turbScaleVal');
   const turbSpeed = document.getElementById('turbSpeed'), turbSpeedVal = document.getElementById('turbSpeedVal');
 
+  // Sensors
   const sensorMode = document.getElementById('sensorMode');
   const sensorInf = document.getElementById('sensorInf'), sensorInfVal = document.getElementById('sensorInfVal');
   const motionSens = document.getElementById('motionSens'), motionSensVal = document.getElementById('motionSensVal');
+  const amp = document.getElementById('amp'), ampVal = document.getElementById('ampVal');
+  const speedCap = document.getElementById('speedCap'), speedCapVal = document.getElementById('speedCapVal');
   const friction = document.getElementById('friction'), frictionVal = document.getElementById('frictionVal');
   const deadzone = document.getElementById('deadzone'), deadzoneVal = document.getElementById('deadzoneVal');
+  const springK = document.getElementById('springK'), springKVal = document.getElementById('springKVal');
+  const springD = document.getElementById('springD'), springDVal = document.getElementById('springDVal');
+  const spinGain = document.getElementById('spinGain'), spinGainVal = document.getElementById('spinGainVal');
   const minDraw = document.getElementById('minDraw'), minDrawVal = document.getElementById('minDrawVal');
   const filter = document.getElementById('filter'), filterVal = document.getElementById('filterVal');
+  const useLinear = document.getElementById('useLinear');
+  const shakeClear = document.getElementById('shakeClear');
+  const sensorDraw = document.getElementById('sensorDraw');
+  const showBrushBtn = document.getElementById('showBrushBtn');
+  const calibrate = document.getElementById('calibrate');
+  const center = document.getElementById('center');
 
+  // Bounds
   const boundsRegion = document.getElementById('boundsRegion');
   const boundsBehavior = document.getElementById('boundsBehavior');
   const circleRadius = document.getElementById('circleRadius'), circleRadiusVal = document.getElementById('circleRadiusVal');
   const rectW = document.getElementById('rectW'), rectWVal = document.getElementById('rectWVal');
   const rectH = document.getElementById('rectH'), rectHVal = document.getElementById('rectHVal');
   const edgePad = document.getElementById('edgePad'), edgePadVal = document.getElementById('edgePadVal');
-  const useLinear = document.getElementById('useLinear');
-  const shakeClear = document.getElementById('shakeClear');
-  const sensorDraw = document.getElementById('sensorDraw');
+  const clipDrawBtn = document.getElementById('clipDraw');
   const showBounds = document.getElementById('showBounds');
-  const calibrate = document.getElementById('calibrate');
-  const center = document.getElementById('center');
 
+  // Visuals/System
   const bgMode = document.getElementById('bgMode');
   const composite = document.getElementById('composite');
   const randomize = document.getElementById('randomize');
-
   const quality = document.getElementById('quality');
   const resetView = document.getElementById('resetView');
 
+  // Panel toggling and quick actions
   menuBtn.addEventListener('click', () => panel.classList.toggle('hidden'));
-
   saveBtn.addEventListener('click', () => {
     try {
       const url = canvas.toDataURL('image/png');
@@ -1203,27 +1468,7 @@
     }
   });
 
-  paletteEl.addEventListener('change', e => state.palette = e.target.value);
-  colorModeEl.addEventListener('change', e => {
-    state.colorMode = e.target.value;
-    if (state.colorMode === 'velocity'){ metricRangeLabel.firstChild.textContent = 'Velocity range (px/s) '; metricRange.max = 2000; metricRange.value = 600; }
-    else if (state.colorMode === 'accel'){ metricRangeLabel.firstChild.textContent = 'Accel range (m/s²) '; metricRange.max = 40; metricRange.value = 18; }
-    else if (state.colorMode === 'spin'){ metricRangeLabel.firstChild.textContent = 'Spin range (deg/s) '; metricRange.max = 1000; metricRange.value = 400; }
-    else if (state.colorMode === 'direction'){ metricRangeLabel.firstChild.textContent = 'Metric range '; metricRange.value = 180; }
-    else if (state.colorMode === 'heat'){ metricRangeLabel.firstChild.textContent = 'Heat drive range '; metricRange.value = 180; }
-    else { metricRangeLabel.firstChild.textContent = 'Metric range '; metricRange.value = 180; }
-    state.metricRange = +metricRange.value; metricRangeVal.textContent = state.metricRange;
-    heatControls.style.display = (state.colorMode === 'heat') ? 'block' : 'none';
-  });
-  metricRange.addEventListener('input', e => { state.metricRange = +e.target.value; metricRangeVal.textContent = state.metricRange; });
-  heatGain.addEventListener('input', e => { state.heatGain = +e.target.value; heatGainVal.textContent = state.heatGain.toFixed(2); });
-  heatDecay.addEventListener('input', e => { state.heatDecay = +e.target.value; heatDecayVal.textContent = state.heatDecay.toFixed(2); });
-  colorSpeed.addEventListener('input', e => { state.colorSpeed = +e.target.value; colorSpeedVal.textContent = state.colorSpeed.toFixed(2); });
-  lockColor.addEventListener('click', () => {
-    state.stroke.lockColor = !state.stroke.lockColor;
-    lockColor.classList.toggle('active', state.stroke.lockColor);
-  });
-
+  // Brush wiring
   brushType.addEventListener('change', e => {
     state.brush = e.target.value;
     strokeBlock.style.display = (state.brush === 'stroke') ? 'block' : 'none';
@@ -1242,7 +1487,6 @@
   strokeDetail.addEventListener('input', e => { state.stroke.detail = +e.target.value; strokeDetailVal.textContent = state.stroke.detail.toFixed(2); });
   lineCap.addEventListener('change', e => state.stroke.cap = e.target.value);
   lineJoin.addEventListener('change', e => state.stroke.join = e.target.value);
-
   size.addEventListener('input', e => { state.brushSize = +e.target.value; sizeVal.textContent = state.brushSize|0; });
   glow.addEventListener('input', e => { state.glow = +e.target.value; glowVal.textContent = state.glow|0; });
 
@@ -1250,14 +1494,32 @@
   mirror.addEventListener('click', () => { state.mirror = !state.mirror; mirror.classList.toggle('active', state.mirror); });
   kaleido.addEventListener('click', () => { state.kaleido = !state.kaleido; kaleido.classList.toggle('active', state.kaleido); });
 
-  fade.addEventListener('input', e => { state.fade = +e.target.value; fadeVal.textContent = state.fade.toFixed(3); });
-  scatter.addEventListener('input', e => { state.scatter = +e.target.value; scatterVal.textContent = state.scatter.toFixed(2); });
+  // Color wiring
+  paletteEl.addEventListener('change', e => state.palette = e.target.value);
+  colorModeEl.addEventListener('change', e => {
+    state.colorMode = e.target.value;
+    if (state.colorMode === 'velocity'){ metricRangeLabel.firstChild.textContent = 'Velocity range (px/s) '; metricRange.max = 2000; metricRange.value = 600; }
+    else if (state.colorMode === 'accel'){ metricRangeLabel.firstChild.textContent = 'Accel range (m/s²) '; metricRange.max = 40; metricRange.value = 18; }
+    else if (state.colorMode === 'spin'){ metricRangeLabel.firstChild.textContent = 'Spin range (deg/s) '; metricRange.max = 1000; metricRange.value = 400; }
+    else if (state.colorMode === 'direction'){ metricRangeLabel.firstChild.textContent = 'Metric range '; metricRange.value = 180; }
+    else if (state.colorMode === 'heat'){ metricRangeLabel.firstChild.textContent = 'Heat drive range '; metricRange.value = 180; }
+    else { metricRangeLabel.firstChild.textContent = 'Metric range '; metricRange.value = 180; }
+    state.metricRange = +metricRange.value; metricRangeVal.textContent = state.metricRange;
+    heatControls.style.display = (state.colorMode === 'heat') ? 'block' : 'none';
+  });
+  metricRange.addEventListener('input', e => { state.metricRange = +e.target.value; metricRangeVal.textContent = state.metricRange; });
+  heatGain.addEventListener('input', e => { state.heatGain = +e.target.value; heatGainVal.textContent = state.heatGain.toFixed(2); });
+  heatDecay.addEventListener('input', e => { state.heatDecay = +e.target.value; heatDecayVal.textContent = state.heatDecay.toFixed(2); });
+  colorSpeed.addEventListener('input', e => { state.colorSpeed = +e.target.value; colorSpeedVal.textContent = state.colorSpeed.toFixed(2); });
+  lockColor.addEventListener('click', () => { state.stroke.lockColor = !state.stroke.lockColor; lockColor.classList.toggle('active', state.stroke.lockColor); });
 
+  // Turbulence wiring
   turbMode.addEventListener('change', e => state.turbMode = e.target.value);
   turbInt.addEventListener('input', e => { state.turbInt = +e.target.value; turbIntVal.textContent = state.turbInt.toFixed(2); });
   turbScale.addEventListener('input', e => { state.turbScale = +e.target.value; turbScaleVal.textContent = state.turbScale.toFixed(3); });
   turbSpeed.addEventListener('input', e => { state.turbSpeed = +e.target.value; turbSpeedVal.textContent = state.turbSpeed.toFixed(2); });
 
+  // Sensors wiring
   sensorMode.addEventListener('change', e => {
     state.sensorMode = e.target.value;
     state.sensor.inited = false;
@@ -1265,25 +1527,34 @@
   });
   sensorInf.addEventListener('input', e => { state.sensorInf = +e.target.value; sensorInfVal.textContent = state.sensorInf.toFixed(2); });
   motionSens.addEventListener('input', e => { state.motionSens = +e.target.value; motionSensVal.textContent = state.motionSens.toFixed(2); });
+  amp.addEventListener('input', e => { state.amp = +e.target.value; ampVal.textContent = state.amp.toFixed(2); });
+  speedCap.addEventListener('input', e => { state.speedCap = +e.target.value; speedCapVal.textContent = state.speedCap|0; });
   friction.addEventListener('input', e => { state.friction = +e.target.value; frictionVal.textContent = state.friction.toFixed(2); });
   deadzone.addEventListener('input', e => { state.deadzone = +e.target.value; deadzoneVal.textContent = state.deadzone.toFixed(2); });
+  springK.addEventListener('input', e => { state.springK = +e.target.value; springKVal.textContent = state.springK.toFixed(1); });
+  springD.addEventListener('input', e => { state.springD = +e.target.value; springDVal.textContent = state.springD.toFixed(2); });
+  spinGain.addEventListener('input', e => { state.spinGain = +e.target.value; spinGainVal.textContent = state.spinGain.toFixed(2); });
   minDraw.addEventListener('input', e => { state.minDrawSpeed = +e.target.value; minDrawVal.textContent = state.minDrawSpeed.toFixed(2); });
   filter.addEventListener('input', e => { state.filterStrength = +e.target.value; filterVal.textContent = state.filterStrength.toFixed(2); });
-
-  boundsRegion.addEventListener('change', e => { state.boundsRegion = e.target.value; });
-  boundsBehavior.addEventListener('change', e => { state.boundsBehavior = e.target.value; });
-  circleRadius.addEventListener('input', e => { state.circleRadiusPct = +e.target.value; circleRadiusVal.textContent = state.circleRadiusPct|0; });
-  rectW.addEventListener('input', e => { state.rectWpct = +e.target.value; rectWVal.textContent = state.rectWpct|0; });
-  rectH.addEventListener('input', e => { state.rectHpct = +e.target.value; rectHVal.textContent = state.rectHpct|0; });
-  edgePad.addEventListener('input', e => { state.edgePad = +e.target.value; edgePadVal.textContent = state.edgePad|0; });
 
   useLinear.addEventListener('click', () => { state.useLinear = !state.useLinear; useLinear.classList.toggle('active', state.useLinear); });
   shakeClear.addEventListener('click', () => { state.shakeClears = !state.shakeClears; shakeClear.classList.toggle('active', state.shakeClears); });
   sensorDraw.addEventListener('click', () => { state.sensorDraws = !state.sensorDraws; sensorDraw.classList.toggle('active', state.sensorDraws); });
-  showBounds.addEventListener('click', () => { state.showBounds = !state.showBounds; showBounds.classList.toggle('active', state.showBounds); });
+  showBrushBtn.addEventListener('click', () => { state.showBrush = !state.showBrush; showBrushBtn.classList.toggle('active', state.showBrush); });
   calibrate.addEventListener('click', () => { state.yawBias = state.yaw; state._tiltBiasX = state.tiltX; state._tiltBiasY = state.tiltY; });
   center.addEventListener('click', () => { state.sensor.inited = false; });
 
+  // Bounds wiring
+  boundsRegion.addEventListener('change', e => { state.boundsRegion = e.target.value; updateClipPath(); });
+  boundsBehavior.addEventListener('change', e => { state.boundsBehavior = e.target.value; });
+  circleRadius.addEventListener('input', e => { state.circleRadiusPct = +e.target.value; circleRadiusVal.textContent = state.circleRadiusPct|0; updateClipPath(); });
+  rectW.addEventListener('input', e => { state.rectWpct = +e.target.value; rectWVal.textContent = state.rectWpct|0; updateClipPath(); });
+  rectH.addEventListener('input', e => { state.rectHpct = +e.target.value; rectHVal.textContent = state.rectHpct|0; updateClipPath(); });
+  edgePad.addEventListener('input', e => { state.edgePad = +e.target.value; edgePadVal.textContent = state.edgePad|0; updateClipPath(); });
+  document.getElementById('clipDraw').addEventListener('click', () => { state.clipDraw = !state.clipDraw; document.getElementById('clipDraw').classList.toggle('active', state.clipDraw); });
+  showBounds.addEventListener('click', () => { state.showBounds = !state.showBounds; showBounds.classList.toggle('active', state.showBounds); });
+
+  // Visuals/System wiring
   bgMode.addEventListener('change', e => { state.bgMode = e.target.value; paintBackground(true); });
   composite.addEventListener('click', () => {
     state.composite = (state.composite === 'lighter') ? 'source-over' : 'lighter';
@@ -1299,7 +1570,7 @@
     state.stroke.detail = +(0.8 + Math.random()*1.8).toFixed(2);
     strokeDetail.value = state.stroke.detail; strokeDetailVal.textContent = state.stroke.detail.toFixed(2);
     state.glow = Math.floor(Math.random()*12); glow.value = state.glow; glowVal.textContent = state.glow;
-    state.scatter = +(Math.random().toFixed(2)); scatter.value = state.scatter; scatterVal.textContent = state.scatter.toFixed(2);
+    state.scatter = +(Math.random().toFixed(2)); scatter.value = state.scatter; document.getElementById('scatterVal').textContent = state.scatter.toFixed(2);
     state.symmetry = Math.floor(1 + Math.random()*18); sym.value = state.symmetry; symVal.textContent = state.symmetry;
     state.palette = ['Rainbow','Neon','Sunset','Ocean','Acid'][Math.floor(Math.random()*5)]; paletteEl.value = state.palette;
     state.turbMode = Math.random() > 0.5 ? 'curl' : 'noise'; turbMode.value = state.turbMode;
@@ -1321,43 +1592,63 @@
 
   // Init labels and UI
   function syncLabels(){
-    metricRangeVal.textContent = state.metricRange;
-    heatGainVal.textContent = state.heatGain.toFixed(2);
-    heatDecayVal.textContent = state.heatDecay.toFixed(2);
-    colorSpeedVal.textContent = state.colorSpeed.toFixed(2);
-
+    // Brush
     widthMinVal.textContent = state.stroke.widthMin|0;
     widthMaxVal.textContent = state.stroke.widthMax|0;
     widthRangeVal.textContent = state.stroke.widthRange|0;
     strokeAlphaVal.textContent = state.stroke.alpha.toFixed(2);
     strokeDetailVal.textContent = state.stroke.detail.toFixed(2);
-
     sizeVal.textContent = state.brushSize|0;
     glowVal.textContent = state.glow|0;
+
+    // Symmetry
     symVal.textContent = state.symmetry;
-    fadeVal.textContent = state.fade.toFixed(3);
-    scatterVal.textContent = state.scatter.toFixed(2);
+
+    // Color
+    metricRangeVal.textContent = state.metricRange;
+    heatGainVal.textContent = state.heatGain.toFixed(2);
+    heatDecayVal.textContent = state.heatDecay.toFixed(2);
+    colorSpeedVal.textContent = state.colorSpeed.toFixed(2);
+    heatControls.style.display = (state.colorMode === 'heat') ? 'block' : 'none';
+
+    // Visuals
+    document.getElementById('fadeVal').textContent = state.fade.toFixed(3);
+    document.getElementById('scatterVal').textContent = state.scatter.toFixed(2);
+
+    // Turb
     turbIntVal.textContent = state.turbInt.toFixed(2);
     turbScaleVal.textContent = state.turbScale.toFixed(3);
     turbSpeedVal.textContent = state.turbSpeed.toFixed(2);
+
+    // Sensors
     sensorInfVal.textContent = state.sensorInf.toFixed(2);
     motionSensVal.textContent = state.motionSens.toFixed(2);
+    ampVal.textContent = state.amp.toFixed(2);
+    speedCapVal.textContent = state.speedCap|0;
     frictionVal.textContent = state.friction.toFixed(2);
     deadzoneVal.textContent = state.deadzone.toFixed(2);
+    springKVal.textContent = state.springK.toFixed(1);
+    springDVal.textContent = state.springD.toFixed(2);
+    spinGainVal.textContent = state.spinGain.toFixed(2);
     minDrawVal.textContent = state.minDrawSpeed.toFixed(2);
     filterVal.textContent = state.filterStrength.toFixed(2);
+
+    // Bounds
     edgePadVal.textContent = state.edgePad|0;
     circleRadiusVal.textContent = state.circleRadiusPct|0;
     rectWVal.textContent = state.rectWpct|0;
     rectHVal.textContent = state.rectHpct|0;
 
+    // Toggle visuals
     const show = (state.stroke.widthMode === 'speed');
     widthRangeLabel.style.display = show ? 'block' : 'none';
     widthRange.style.display = show ? 'block' : 'none';
-    heatControls.style.display = (state.colorMode === 'heat') ? 'block' : 'none';
     strokeBlock.style.display = (state.brush === 'stroke') ? 'block' : 'none';
     dotsBlock.style.display = (state.brush !== 'stroke') ? 'block' : 'none';
     lockColor.classList.toggle('active', state.stroke.lockColor);
+    showBounds.classList.toggle('active', state.showBounds);
+    document.getElementById('clipDraw').classList.toggle('active', state.clipDraw);
+    showBrushBtn.classList.toggle('active', state.showBrush);
   }
 
   // Shake-to-clear
