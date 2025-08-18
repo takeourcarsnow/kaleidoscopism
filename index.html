@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-<title>Psychedelic Sketch — Wavy Turbulence + Symmetry Modes</title>
+<title>Psychedelic Sketch — Wavy Turbulence + Symmetry Modes (Improved Bounds)</title>
 <style>
   :root {
     --bg: #050508;
@@ -48,6 +48,7 @@
   }
   .btn:active { transform: translateY(1px); }
   .btn.active { outline: 2px solid var(--accent); }
+  .btn[disabled] { opacity: 0.5; pointer-events: none; }
   .icon { font-size: 18px; }
   .chip {
     pointer-events: all; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
@@ -117,7 +118,7 @@
 
   <div class="topbar">
     <button id="menuBtn" class="btn" aria-label="Settings"><span class="icon">⚙️</span> Settings</button>
-    <div class="chip" id="hint">Turbulence now adds real waviness • Try Perp wobble or Both • New symmetry modes in Brush tab</div>
+    <div class="chip" id="hint">Bounds fixed • New “Hide” masks outside • Symmetry slices work in all modes + Angle control</div>
     <div style="display:flex; gap:8px;">
       <button id="sensorBtn" class="btn" aria-label="Enable sensors"><span class="icon">📳</span> Sensors</button>
       <button id="saveBtn" class="btn" aria-label="Save"><span class="icon">📸</span></button>
@@ -197,14 +198,17 @@
               <option value="radial-kaleido" selected>Kaleido (radial)</option>
               <option value="mirror-vertical">Mirror Vertical</option>
               <option value="mirror-horizontal">Mirror Horizontal</option>
-              <option value="quad">Quad (X + Y)</option>
               <option value="diagonals">Diagonals (45°)</option>
               <option value="octa">Octa (X/Y + Diagonals)</option>
+              <option value="quad">Quad (X + Y)</option>
             </select>
           </label>
+
           <div id="symSlicesBlock">
-            <label>Symmetry slices <span id="symVal"></span></label>
+            <label>Symmetry copies/axes <span id="symVal"></span></label>
             <input type="range" id="sym" min="1" max="48" step="1" value="10" />
+            <label>Symmetry angle (°) <span id="symAngVal"></span></label>
+            <input type="range" id="symAngle" min="-180" max="180" step="1" value="0" />
           </div>
         </div>
       </div>
@@ -342,7 +346,7 @@
             <select id="boundsBehavior">
               <option value="wrap">Wrap</option>
               <option value="bounce" selected>Bounce</option>
-              <option value="clamp">Clamp</option>
+              <option value="hide">Hide (mask outside)</option>
             </select>
           </label>
           <label>Circle radius (%) <span id="circleRadiusVal"></span></label>
@@ -403,7 +407,7 @@
     </div>
   </div>
 
-  <div class="legend" id="legend">Try Perp wobble + moderate Scale for organic lines • Symmetry: “Octa” for 8-fold</div>
+  <div class="legend" id="legend">Symmetry: use Slices + Angle • Bounds: Hide = mask, Wrap = Pac‑Man, Bounce = reflect</div>
 
   <div class="bottombar">
     <button id="clearBtn" class="fab secondary">Clear</button>
@@ -442,8 +446,9 @@
 
     // symmetry
     symMode: 'radial-kaleido', // 'off'|'radial'|'radial-kaleido'|'mirror-vertical'|'mirror-horizontal'|'quad'|'diagonals'|'octa'
-    symmetry: 10,
-    rotOffset: 0,
+    symmetry: 10,             // used across all modes (copies/axes)
+    symAngleDeg: 0,           // manual axis/copies rotation
+    rotOffset: 0,             // gyro-driven rotation offset
 
     // color
     palette: 'Rainbow',
@@ -468,7 +473,7 @@
 
     // sensors
     sensorsEnabled: false,
-    sensorMode: 'off', // 'off'|'tilt'|'motion'|'motion-swirl'|'motion-raw'|'tilt-spring'|'gyro-orbit'|'shake-burst'
+    sensorMode: 'off',
     sensorInf: 0.7,
     motionSens: 2.2,
     amp: 1.6,
@@ -487,19 +492,19 @@
 
     // bounds
     boundsRegion: 'screen',         // 'screen'|'circle'|'rect'
-    boundsBehavior: 'bounce',       // 'wrap'|'bounce'|'clamp'
+    boundsBehavior: 'bounce',       // 'wrap'|'bounce'|'hide'
     circleRadiusPct: 68,            // % of half-min(side)
     rectWpct: 72,                   // % of screen width
     rectHpct: 60,                   // % of screen height
     edgePad: 0,
     showBounds: false,
-    clipDraw: true,
+    clipDraw: true,                 // 'Hide' forces this true internally
 
     // device signals
     tiltX: 0, tiltY: 0, yaw: 0, yawBias: 0,
     accelMag: 0,
-    ax: 0, ay: 0, az: 0,         // linear accel filtered or gravity depending toggle
-    rawAx: 0, rawAy: 0,          // including-gravity (raw-ish) filtered lightly
+    ax: 0, ay: 0, az: 0,
+    rawAx: 0, rawAy: 0,
     rot: { alpha: 0, beta: 0, gamma: 0 },
     rotMag: 0,
 
@@ -535,6 +540,7 @@
   const lerp = (a,b,t)=>a+(b-a)*t;
   const smooth = t => t*t*(3-2*t);
   const map01 = (x,a,b)=>clamp((x-a)/(b-a),0,1);
+  const toRad = d => d * Math.PI / 180;
 
   // Noise (3D)
   function hash3(i,j,k){ const s = Math.sin(i*127.1 + j*311.7 + k*74.7)*43758.5453123; return s - Math.floor(s); }
@@ -649,7 +655,6 @@
     state.width = w; state.height = h;
     state.cx = w/2; state.cy = h/2;
     paintBackground(true);
-    // reset sensor center if needed
     if (!state.sensor.inited) {
       state.sensor.x = state.cx; state.sensor.y = state.cy;
       state.sensor.lastX = state.cx; state.sensor.lastY = state.cy;
@@ -706,7 +711,6 @@
     const c = Math.cos(ang), s = Math.sin(ang);
     return { x: cx + dx*c - dy*s, y: cy + dx*s + dy*c };
   }
-  function mirrorAcrossCenter(x,y){ const dx = x - state.cx; return { x: state.cx - dx, y }; } // vertical axis
   function reflectAcrossAxis(p, ang){
     const dx = p.x - state.cx, dy = p.y - state.cy;
     const ux = Math.cos(ang), uy = Math.sin(ang);
@@ -743,6 +747,8 @@
     clipCache.path = p;
   }
   function isClipNeeded(){
+    // Hide always masks; otherwise honor user toggle
+    if (state.boundsBehavior === 'hide') return true;
     if (!state.clipDraw) return false;
     if (state.boundsRegion === 'screen' && state.edgePad === 0) return false;
     return true;
@@ -765,28 +771,29 @@
     const dt = Math.abs((b.t||0) - (a.t||0)) || 0;
     const dist = Math.hypot((b.x-a.x), (b.y-a.y));
     const MAX_SEG = Math.min(state.width, state.height) * 0.35;
-    if (dt > 180 || dist > MAX_SEG) return; // skip
+    if (dt > 180 || dist > MAX_SEG) return; // skip likely wrap jumps
     withClipDraw(()=> drawSymmetricSegment(a, b, dt, dist));
   }
 
   function drawSymmetricSegment(a, b, dt=16, dist=null){
-    const mode = state.symMode;
-    const slices = Math.max(1, Math.floor(state.symmetry));
-    const step = (Math.PI*2) / slices;
-    const rotOff = state.rotOffset;
-
+    const copies = Math.max(1, Math.floor(state.symmetry));
+    const base = state.rotOffset + toRad(state.symAngleDeg);
     const emit = (pa, pb) => drawByBrush(pa, pb, dt, dist);
 
+    const mode = state.symMode;
     if (mode === 'off'){
       emit(a,b);
       return;
     }
 
+    // Helpers
+    const doRotate = (p, ang) => rotateAround(p.x, p.y, state.cx, state.cy, ang);
+
     if (mode === 'radial' || mode === 'radial-kaleido'){
-      for (let i=0; i<slices; i++){
-        const ang = i*step + rotOff;
-        const ra = rotateAround(a.x, a.y, state.cx, state.cy, ang);
-        const rb = rotateAround(b.x, b.y, state.cx, state.cy, ang);
+      const step = (Math.PI*2) / copies;
+      for (let i=0; i<copies; i++){
+        const ang = i*step + base;
+        const ra = doRotate(a, ang), rb = doRotate(b, ang);
         emit(ra, rb);
         if (mode === 'radial-kaleido'){
           const ka = reflectAcrossAxis(ra, ang), kb = reflectAcrossAxis(rb, ang);
@@ -796,48 +803,57 @@
       return;
     }
 
-    // Mirror helpers
-    const mirrorVertical = (p)=> reflectAcrossAxis(p, Math.PI/2);
-    const mirrorHorizontal = (p)=> reflectAcrossAxis(p, 0);
-    const mirrorDiag45 = (p)=> reflectAcrossAxis(p, Math.PI/4);
-    const mirrorDiag135 = (p)=> reflectAcrossAxis(p, -Math.PI/4);
+    // Modes that use axes; replicate around center with π-periodic step (axes repeat every 180°)
+    const axisStep = Math.PI / copies;
 
     if (mode === 'mirror-vertical'){
-      emit(a,b);
-      emit(mirrorVertical(a), mirrorVertical(b));
+      const baseAxis = Math.PI/2; // vertical axis
+      for (let i=0; i<copies; i++){
+        const rot = base + i*axisStep;
+        const angAxis = baseAxis + rot;
+        const ra = doRotate(a, rot), rb = doRotate(b, rot);
+        emit(ra, rb);
+        emit(reflectAcrossAxis(ra, angAxis), reflectAcrossAxis(rb, angAxis));
+      }
       return;
     }
+
     if (mode === 'mirror-horizontal'){
-      emit(a,b);
-      emit(mirrorHorizontal(a), mirrorHorizontal(b));
+      const baseAxis = 0; // horizontal axis
+      for (let i=0; i<copies; i++){
+        const rot = base + i*axisStep;
+        const angAxis = baseAxis + rot;
+        const ra = doRotate(a, rot), rb = doRotate(b, rot);
+        emit(ra, rb);
+        emit(reflectAcrossAxis(ra, angAxis), reflectAcrossAxis(rb, angAxis));
+      }
       return;
     }
-    if (mode === 'quad'){
-      const av = mirrorVertical(a), bv = mirrorVertical(b);
-      const ah = mirrorHorizontal(a), bh = mirrorHorizontal(b);
-      const avh = mirrorHorizontal(av), bvh = mirrorHorizontal(bv);
-      emit(a,b); emit(av,bv); emit(ah,bh); emit(avh,bvh);
-      return;
-    }
+
     if (mode === 'diagonals'){
-      const a1 = mirrorDiag45(a), b1 = mirrorDiag45(b);
-      const a2 = mirrorDiag135(a), b2 = mirrorDiag135(b);
-      emit(a,b); emit(a1,b1); emit(a2,b2);
+      for (let i=0; i<copies; i++){
+        const rot = base + i*axisStep;
+        const ra = doRotate(a, rot), rb = doRotate(b, rot);
+        emit(ra, rb);
+        const ax1 = Math.PI/4 + rot, ax2 = -Math.PI/4 + rot;
+        emit(reflectAcrossAxis(ra, ax1), reflectAcrossAxis(rb, ax1));
+        emit(reflectAcrossAxis(ra, ax2), reflectAcrossAxis(rb, ax2));
+      }
       return;
     }
-    if (mode === 'octa'){
-      // Original + reflections across 0, 90, 45, 135 => 8-fold
-      const av = mirrorVertical(a), bv = mirrorVertical(b);
-      const ah = mirrorHorizontal(a), bh = mirrorHorizontal(b);
-      const a1 = mirrorDiag45(a), b1 = mirrorDiag45(b);
-      const a2 = mirrorDiag135(a), b2 = mirrorDiag135(b);
-      emit(a,b); emit(av,bv); emit(ah,bh); emit(a1,b1); emit(a2,b2);
-      // Combine some double-mirrors for completeness
-      const avh = mirrorHorizontal(av), bvh = mirrorHorizontal(bv);
-      emit(avh,bvh);
-      const a12 = mirrorDiag135(a1), b12 = mirrorDiag135(b1);
-      const a21 = mirrorDiag45(a2), b21 = mirrorDiag45(b2);
-      emit(a12,b12); emit(a21,b21);
+
+    if (mode === 'octa' || mode === 'quad'){
+      // Octa: reflect across 0, 90, 45, 135; Quad: across 0 and 90
+      const axesBase = (mode === 'octa') ? [0, Math.PI/2, Math.PI/4, -Math.PI/4] : [0, Math.PI/2];
+      for (let i=0; i<copies; i++){
+        const rot = base + i*axisStep;
+        const ra = doRotate(a, rot), rb = doRotate(b, rot);
+        emit(ra, rb);
+        for (const ax of axesBase){
+          const angAxis = ax + rot;
+          emit(reflectAcrossAxis(ra, angAxis), reflectAcrossAxis(rb, angAxis));
+        }
+      }
       return;
     }
 
@@ -880,9 +896,8 @@
 
     const baseStep = 6 / state.stroke.detail; // px per sample
     const steps = Math.max(1, Math.ceil(dist / Math.max(1, baseStep)));
-    let x0 = a.x, y0 = a.y;
+    const nx = -dy / dist, ny = dx / dist; // perpendicular
 
-    const nx = -dy / dist, ny = dx / dist; // perpendicular (for waviness)
     const sT = state.turbScale, zT = (tNow*0.001) * (0.6 + state.turbSpeed);
 
     const doDistort = (x, y) => {
@@ -900,7 +915,6 @@
           y += fv.y * ampFlow;
         }
       }
-      // optional extra scatter/noise for organic micro jitter
       if (state.scatter > 0){
         const nval = (noise3(x*0.015, y*0.015, tNow*0.001) - 0.5) * 2;
         const tiltW = (state.tiltX + state.tiltY)*0.5;
@@ -915,35 +929,26 @@
       ctx.strokeStyle = lockedColor;
       if (state.glow > 0) ctx.shadowColor = lockedColor;
       ctx.beginPath();
-      // start point distortion
-      let p0 = doDistort(x0, y0);
+      let p0 = doDistort(a.x, a.y);
       ctx.moveTo(p0.x, p0.y);
       for (let i=1; i<=steps; i++){
         const f = i/steps;
-        let x = lerp(a.x, b.x, f);
-        let y = lerp(a.y, b.y, f);
-        const p = doDistort(x,y);
+        const p = doDistort(lerp(a.x, b.x, f), lerp(a.y, b.y, f));
         ctx.lineTo(p.x, p.y);
       }
       ctx.stroke();
     } else {
-      // per-step color
-      let pPrev = doDistort(x0, y0);
+      let pPrev = doDistort(a.x, a.y);
       for (let i=1; i<=steps; i++){
         const f = i/steps;
-        let x = lerp(a.x, b.x, f);
-        let y = lerp(a.y, b.y, f);
-        const p = doDistort(x,y);
-
+        const p = doDistort(lerp(a.x, b.x, f), lerp(a.y, b.y, f));
         const col = getStrokeColor(p.x, p.y, segSpeed, segDir, tNow, i, dist);
         ctx.strokeStyle = col;
         if (state.glow > 0) ctx.shadowColor = col;
-
         ctx.beginPath();
         ctx.moveTo(pPrev.x, pPrev.y);
         ctx.lineTo(p.x, p.y);
         ctx.stroke();
-
         pPrev = p;
       }
     }
@@ -1043,94 +1048,127 @@
       const old = { x: a.x, y: a.y, t: t - dt };
       a.x += a.vx * sp * dt*0.06;
       a.y += a.vy * sp * dt*0.06;
-      bound(a);
+      applyBounds(a);
       withClipDraw(()=> safeSymmetricSegment(old, {x:a.x, y:a.y, t:t}));
     }
   }
 
-  // Bounds logic (clear differences for wrap/bounce/clamp)
-  function bound(p){
+  // Bounds helpers
+  function wrapRange(v, min, max){
+    const w = max - min;
+    if (w <= 0) return min;
+    return min + ((v - min) % w + w) % w;
+  }
+
+  function applyBounds(p){
+    // 'Hide' does not constrain motion; it only clips drawing
+    if (state.boundsBehavior === 'hide') return;
+
     const pad = state.edgePad;
     const w = state.width, h = state.height;
     const cx = state.cx, cy = state.cy;
     const behavior = state.boundsBehavior;
     const region = state.boundsRegion;
 
-    if (region === 'screen'){
-      if (behavior === 'wrap'){
-        if (p.x < 0 - pad) { p.x = w - 1 - pad; }
-        if (p.x > w + pad) { p.x = 0 + 1 + pad; }
-        if (p.y < 0 - pad) { p.y = h - 1 - pad; }
-        if (p.y > h + pad) { p.y = 0 + 1 + pad; }
-      } else if (behavior === 'bounce'){
-        if (p.x < 0 + pad){ p.x = 0 + pad; p.vx = -p.vx; }
-        if (p.x > w - pad){ p.x = w - pad; p.vx = -p.vx; }
-        if (p.y < 0 + pad){ p.y = 0 + pad; p.vy = -p.vy; }
-        if (p.y > h - pad){ p.y = h - pad; p.vy = -p.vy; }
-        p.vx *= 0.9; p.vy *= 0.9;
-      } else {
-        if (p.x < 0 + pad){ p.x = 0 + pad; p.vx = 0; }
-        if (p.x > w - pad){ p.x = w - pad; p.vx = 0; }
-        if (p.y < 0 + pad){ p.y = 0 + pad; p.vy = 0; }
-        if (p.y > h - pad){ p.y = h - pad; p.vy = 0; }
-      }
-      return;
-    }
-
-    if (region === 'circle'){
-      const R = (Math.min(w, h) * 0.5) * (state.circleRadiusPct/100);
-      const rLimit = Math.max(10, R - pad);
-      const dx = p.x - cx, dy = p.y - cy;
-      const r = Math.hypot(dx, dy) || 1;
-      const nx = dx / r, ny = dy / r;
-
-      if (r > rLimit){
-        if (behavior === 'wrap'){
-          // Teleport to opposite edge along same ray, keep velocity
-          p.x = cx - nx * (rLimit - 1);
-          p.y = cy - ny * (rLimit - 1);
-        } else if (behavior === 'bounce'){
-          // Reflect velocity across normal
-          p.x = cx + nx * rLimit;
-          p.y = cy + ny * rLimit;
-          const vdotn = (p.vx||0)*nx + (p.vy||0)*ny;
-          p.vx = (p.vx || 0) - 2*vdotn*nx;
-          p.vy = (p.vy || 0) - 2*vdotn*ny;
-          p.vx *= 0.9; p.vy *= 0.9;
-        } else {
-          // Clamp and stop
-          p.x = cx + nx * rLimit;
-          p.y = cy + ny * rLimit;
-          p.vx = 0; p.vy = 0;
-        }
-      }
-      return;
-    }
-
-    if (region === 'rect'){
+    // Utility reflection that handles overshoot (rect)
+    function reflectRect(){
       const rw = (state.rectWpct/100) * w * 0.5;
       const rh = (state.rectHpct/100) * h * 0.5;
       const xMin = cx - rw + pad, xMax = cx + rw - pad;
       const yMin = cy - rh + pad, yMax = cy + rh - pad;
 
       if (behavior === 'wrap'){
-        if (p.x < xMin) { p.x = xMax - 1; }
-        if (p.x > xMax) { p.x = xMin + 1; }
-        if (p.y < yMin) { p.y = yMax - 1; }
-        if (p.y > yMax) { p.y = yMin + 1; }
+        p.x = wrapRange(p.x, xMin, xMax);
+        p.y = wrapRange(p.y, yMin, yMax);
+        return;
+      }
+
+      // bounce: reflect with overshoot
+      p.vx = p.vx || 0; p.vy = p.vy || 0;
+      let safety = 0;
+      while ((p.x < xMin || p.x > xMax || p.y < yMin || p.y > yMax) && safety++ < 6){
+        if (p.x < xMin){ p.x = xMin + (xMin - p.x); p.vx = -p.vx; }
+        if (p.x > xMax){ p.x = xMax - (p.x - xMax); p.vx = -p.vx; }
+        if (p.y < yMin){ p.y = yMin + (yMin - p.y); p.vy = -p.vy; }
+        if (p.y > yMax){ p.y = yMax - (p.y - yMax); p.vy = -p.vy; }
+      }
+      p.vx *= 0.9; p.vy *= 0.9;
+    }
+
+    // Screen region
+    if (region === 'screen'){
+      if (behavior === 'wrap'){
+        const xMin = 0 + pad, xMax = w - pad;
+        const yMin = 0 + pad, yMax = h - pad;
+        p.x = wrapRange(p.x, xMin, xMax);
+        p.y = wrapRange(p.y, yMin, yMax);
       } else if (behavior === 'bounce'){
-        if (p.x < xMin){ p.x = xMin; p.vx = -p.vx; }
-        if (p.x > xMax){ p.x = xMax; p.vx = -p.vx; }
-        if (p.y < yMin){ p.y = yMin; p.vy = -p.vy; }
-        if (p.y > yMax){ p.y = yMax; p.vy = -p.vy; }
+        const xMin = 0 + pad, xMax = w - pad;
+        const yMin = 0 + pad, yMax = h - pad;
+        p.vx = p.vx || 0; p.vy = p.vy || 0;
+        let safety = 0;
+        while ((p.x < xMin || p.x > xMax || p.y < yMin || p.y > yMax) && safety++ < 6){
+          if (p.x < xMin){ p.x = xMin + (xMin - p.x); p.vx = -p.vx; }
+          if (p.x > xMax){ p.x = xMax - (p.x - xMax); p.vx = -p.vx; }
+          if (p.y < yMin){ p.y = yMin + (yMin - p.y); p.vy = -p.vy; }
+          if (p.y > yMax){ p.y = yMax - (p.y - yMax); p.vy = -p.vy; }
+        }
         p.vx *= 0.9; p.vy *= 0.9;
-      } else {
-        if (p.x < xMin){ p.x = xMin; p.vx = 0; }
-        if (p.x > xMax){ p.x = xMax; p.vx = 0; }
-        if (p.y < yMin){ p.y = yMin; p.vy = 0; }
-        if (p.y > yMax){ p.y = yMax; p.vy = 0; }
       }
       return;
+    }
+
+    // Circle region
+    if (region === 'circle'){
+      const R = (Math.min(w, h) * 0.5) * (state.circleRadiusPct/100);
+      const rLimit = Math.max(10, R - pad);
+      let dx = p.x - cx, dy = p.y - cy;
+      let r = Math.hypot(dx, dy);
+
+      if (behavior === 'wrap'){
+        if (r > rLimit){
+          const nx = dx / r, ny = dy / r;
+          // overshoot-aware opposite-side wrap (Pac-Man through circle)
+          const per = (r - rLimit) % (2*rLimit);
+          const opposite = (per <= rLimit);
+          const newR = opposite ? (rLimit - per) : (per - rLimit);
+          const sign = opposite ? -1 : 1;
+          p.x = cx + sign * nx * newR;
+          p.y = cy + sign * ny * newR;
+        }
+        return;
+      }
+
+      if (behavior === 'bounce'){
+        if (r > rLimit){
+          p.vx = p.vx || 0; p.vy = p.vy || 0;
+          let safety = 0;
+          while (r > rLimit && safety++ < 6){
+            const nx = dx / r, ny = dy / r;
+            const overshoot = r - rLimit;
+            // mirror position back inside by overshoot
+            p.x = cx + nx * (rLimit - overshoot);
+            p.y = cy + ny * (rLimit - overshoot);
+            // reflect velocity across normal
+            const vdotn = p.vx*nx + p.vy*ny;
+            p.vx = p.vx - 2*vdotn*nx;
+            p.vy = p.vy - 2*vdotn*ny;
+            dx = p.x - cx; dy = p.y - cy; r = Math.hypot(dx, dy);
+          }
+          p.vx *= 0.9; p.vy *= 0.9;
+        }
+        return;
+      }
+      return;
+    }
+
+    // Rect (centered) region
+    if (region === 'rect'){
+      if (behavior === 'wrap'){
+        reflectRect(); // uses wrap branch inside
+      } else if (behavior === 'bounce'){
+        reflectRect();
+      }
     }
   }
 
@@ -1202,9 +1240,9 @@
     }
 
     const dtSec = Math.max(0.001, dt * 0.001);
-    const rotZ = state.rot.alpha || 0; // deg/s (approx yaw-ish)
+    const rotZ = state.rot.alpha || 0;
     const ang = -getScreenAngleRad();
-    const gScale = Math.min(state.width, state.height) / 400; // scale to screen
+    const gScale = Math.min(state.width, state.height) / 400;
 
     if (state.sensorMode === 'tilt'){
       const reach = 0.46;
@@ -1216,7 +1254,7 @@
       const f = flowVec(p.x, p.y, now*0.001);
       p.x += f.x * state.turbInt * 8 * dtSec;
       p.y += f.y * state.turbInt * 8 * dtSec;
-      bound(p);
+      applyBounds(p);
 
     } else if (state.sensorMode === 'tilt-spring'){
       const reach = 0.6;
@@ -1227,32 +1265,26 @@
       p.vx += (tx - p.x) * k * dtSec;
       p.vy += (ty - p.y) * k * dtSec;
       p.vx *= dmp; p.vy *= dmp;
-      // add mild flow
       const f = flowVec(p.x, p.y, now*0.001);
       p.vx += f.x * state.turbInt * 10 * dtSec;
       p.vy += f.y * state.turbInt * 10 * dtSec;
 
-      // cap per-second speed
       capSpeed(p, dtSec);
       p.x += p.vx; p.y += p.vy;
-      bound(p);
+      applyBounds(p);
 
     } else if (state.sensorMode === 'motion' || state.sensorMode === 'motion-swirl' || state.sensorMode === 'motion-raw'){
-      // Choose accel source
       let ax = state.ax, ay = state.ay;
       if (state.sensorMode === 'motion-raw'){ ax = state.rawAx; ay = state.rawAy; }
-      // rotate device axes to screen coords
       const rx = ax * Math.cos(ang) - ay * Math.sin(ang);
       const ry = ax * Math.sin(ang) + ay * Math.cos(ang);
       const mag = Math.hypot(rx, ry);
       const dz = state.deadzone;
-      // adaptive gain
       const gain = state.motionSens * state.amp * gScale * 60;
       const driveX = (mag > dz ? (rx / (mag || 1)) * (mag - dz) : 0) * gain * dtSec;
       const driveY = (mag > dz ? (ry / (mag || 1)) * (mag - dz) : 0) * gain * dtSec;
       p.vx += driveX; p.vy += driveY;
 
-      // Flow + optional gyro swirl
       const f = flowVec(p.x, p.y, now*0.001);
       let swirl = 0;
       if (state.sensorMode !== 'motion-raw' && state.sensorMode !== 'motion'){
@@ -1266,11 +1298,10 @@
         p.vx = vx; p.vy = vy;
       }
 
-      // friction, cap, move
       p.vx *= state.friction; p.vy *= state.friction;
       capSpeed(p, dtSec);
       p.x += p.vx; p.y += p.vy;
-      bound(p);
+      applyBounds(p);
 
     } else if (state.sensorMode === 'gyro-orbit'){
       const angleSpeed = (rotZ/180) * (0.6 + state.sensorInf*1.2) * state.spinGain;
@@ -1283,10 +1314,9 @@
       const smoothing = 1 - Math.pow(1 - 0.3, dtSec*60);
       p.x = lerp(p.x, tx, smoothing);
       p.y = lerp(p.y, ty, smoothing);
-      bound(p);
+      applyBounds(p);
 
     } else if (state.sensorMode === 'shake-burst'){
-      // Like Motion, but bursts on high accel
       const rx = state.ax * Math.cos(ang) - state.ay * Math.sin(ang);
       const ry = state.ax * Math.sin(ang) + state.ay * Math.cos(ang);
       const gain = state.motionSens * state.amp * gScale * 70;
@@ -1296,7 +1326,6 @@
       p.vx += f.x * state.turbInt * 12 * dtSec;
       p.vy += f.y * state.turbInt * 12 * dtSec;
 
-      // Burst kick
       if (state.accelMag > 18){
         const t = now;
         if (t - state._lastBurst > 180){
@@ -1311,7 +1340,7 @@
       p.vx *= state.friction; p.vy *= state.friction;
       capSpeed(p, dtSec);
       p.x += p.vx; p.y += p.vy;
-      bound(p);
+      applyBounds(p);
     }
 
     // Speed metric
@@ -1332,7 +1361,7 @@
   }
 
   function capSpeed(p, dtSec){
-    const v = Math.hypot(p.vx, p.vy);
+    const v = Math.hypot(p.vx||0, p.vy||0);
     if (v <= 1e-6) return;
     const vps = v / dtSec; // px/s
     if (vps > state.speedCap){
@@ -1346,7 +1375,7 @@
   function tick(){
     const now = performance.now();
     let dt = now - lastFrame;
-    if (dt > 120) dt = 16; // clamp after tab switches
+    if (dt > 120) dt = 16;
     lastFrame = now;
 
     // fade
@@ -1361,7 +1390,7 @@
       ctx.restore();
     }
 
-    // symmetry rotation follows yaw
+    // symmetry rotation follows yaw + manual angle
     state.rotOffset = (state.yaw - state.yawBias) * 0.15 * state.sensorInf;
 
     // sensor brush
@@ -1425,15 +1454,14 @@
     const lin = e.acceleration || null;
     const r = e.rotationRate || { alpha:0, beta:0, gamma:0 };
 
-    // low-pass factor from UI
     const a = clamp(state.filterStrength, 0, 0.95);
 
-    // Including-gravity LP for gravity estimate
+    // LP gravity estimate
     lp.gx = a*lp.gx + (1-a)*(inc.x || 0);
     lp.gy = a*lp.gy + (1-a)*(inc.y || 0);
     lp.gz = a*lp.gz + (1-a)*(inc.z || 0);
 
-    // Linear accel (OS-provided else subtract gravity LP)
+    // Linear accel (OS or subtract gravity LP)
     const lax = (lin && isFinite(lin.x)) ? lin.x : (inc.x - lp.gx);
     const lay = (lin && isFinite(lin.y)) ? lin.y : (inc.y - lp.gy);
     const laz = (lin && isFinite(lin.z)) ? lin.z : (inc.z - lp.gz);
@@ -1488,6 +1516,7 @@
   const symModeEl = document.getElementById('symMode');
   const symBlock = document.getElementById('symSlicesBlock');
   const sym = document.getElementById('sym'), symVal = document.getElementById('symVal');
+  const symAngle = document.getElementById('symAngle'), symAngVal = document.getElementById('symAngVal');
 
   // Color
   const paletteEl = document.getElementById('palette');
@@ -1593,9 +1622,10 @@
 
   symModeEl.addEventListener('change', e => {
     state.symMode = e.target.value;
-    symBlock.style.display = (state.symMode === 'radial' || state.symMode === 'radial-kaleido') ? 'block' : 'none';
+    symBlock.style.display = 'block'; // always available
   });
   sym.addEventListener('input', e => { state.symmetry = parseInt(e.target.value,10); symVal.textContent = state.symmetry; });
+  symAngle.addEventListener('input', e => { state.symAngleDeg = parseInt(e.target.value, 10); symAngVal.textContent = state.symAngleDeg; });
 
   // Color wiring
   paletteEl.addEventListener('change', e => state.palette = e.target.value);
@@ -1650,12 +1680,26 @@
 
   // Bounds wiring
   boundsRegion.addEventListener('change', e => { state.boundsRegion = e.target.value; updateClipPath(); });
-  boundsBehavior.addEventListener('change', e => { state.boundsBehavior = e.target.value; });
+  boundsBehavior.addEventListener('change', e => {
+    state.boundsBehavior = e.target.value;
+    // Hide forces clipping on; others restore control
+    if (state.boundsBehavior === 'hide'){
+      state.clipDraw = true;
+      clipDrawBtn.classList.add('active');
+      clipDrawBtn.setAttribute('disabled','true');
+    } else {
+      clipDrawBtn.removeAttribute('disabled');
+    }
+  });
   circleRadius.addEventListener('input', e => { state.circleRadiusPct = +e.target.value; circleRadiusVal.textContent = state.circleRadiusPct|0; updateClipPath(); });
   rectW.addEventListener('input', e => { state.rectWpct = +e.target.value; rectWVal.textContent = state.rectWpct|0; updateClipPath(); });
   rectH.addEventListener('input', e => { state.rectHpct = +e.target.value; rectHVal.textContent = state.rectHpct|0; updateClipPath(); });
   edgePad.addEventListener('input', e => { state.edgePad = +e.target.value; edgePadVal.textContent = state.edgePad|0; updateClipPath(); });
-  document.getElementById('clipDraw').addEventListener('click', () => { state.clipDraw = !state.clipDraw; document.getElementById('clipDraw').classList.toggle('active', state.clipDraw); });
+  clipDrawBtn.addEventListener('click', () => {
+    if (state.boundsBehavior === 'hide') return; // forced on
+    state.clipDraw = !state.clipDraw;
+    clipDrawBtn.classList.toggle('active', state.clipDraw);
+  });
   showBounds.addEventListener('click', () => { state.showBounds = !state.showBounds; showBounds.classList.toggle('active', state.showBounds); });
 
   // Visuals/System wiring
@@ -1676,10 +1720,11 @@
     state.glow = Math.floor(Math.random()*12); glow.value = state.glow; glowVal.textContent = state.glow;
     state.scatter = +(Math.random().toFixed(2)); scatter.value = state.scatter; document.getElementById('scatterVal').textContent = state.scatter.toFixed(2);
     state.symmetry = Math.floor(1 + Math.random()*24); sym.value = state.symmetry; symVal.textContent = state.symmetry;
+    state.symAngleDeg = Math.floor(-90 + Math.random()*180); symAngle.value = state.symAngleDeg; symAngVal.textContent = state.symAngleDeg;
     const modes = ['off','radial','radial-kaleido','mirror-vertical','mirror-horizontal','quad','diagonals','octa'];
     state.symMode = modes[Math.floor(Math.random()*modes.length)];
     symModeEl.value = state.symMode;
-    symBlock.style.display = (state.symMode === 'radial' || state.symMode === 'radial-kaleido') ? 'block' : 'none';
+    symBlock.style.display = 'block';
     state.palette = ['Rainbow','Neon','Sunset','Ocean','Acid'][Math.floor(Math.random()*5)]; paletteEl.value = state.palette;
     state.turbMode = Math.random() > 0.5 ? 'curl' : 'noise'; turbMode.value = state.turbMode;
     state.turbDist = ['perp','flow','both'][Math.floor(Math.random()*3)]; turbDist.value = state.turbDist;
@@ -1712,14 +1757,13 @@
 
     // Symmetry
     symVal.textContent = state.symmetry;
-    symBlock.style.display = (state.symMode === 'radial' || state.symMode === 'radial-kaleido') ? 'block' : 'none';
+    symAngVal.textContent = state.symAngleDeg;
 
     // Color
     metricRangeVal.textContent = state.metricRange;
     heatGainVal.textContent = state.heatGain.toFixed(2);
     heatDecayVal.textContent = state.heatDecay.toFixed(2);
     colorSpeedVal.textContent = state.colorSpeed.toFixed(2);
-    heatControls.style.display = (state.colorMode === 'heat') ? 'block' : 'none';
 
     // Visuals
     document.getElementById('fadeVal').textContent = state.fade.toFixed(3);
@@ -1757,8 +1801,15 @@
     dotsBlock.style.display = (state.brush !== 'stroke') ? 'block' : 'none';
     lockColor.classList.toggle('active', state.stroke.lockColor);
     showBounds.classList.toggle('active', state.showBounds);
-    document.getElementById('clipDraw').classList.toggle('active', state.clipDraw);
+    clipDrawBtn.classList.toggle('active', state.clipDraw);
     showBrushBtn.classList.toggle('active', state.showBrush);
+
+    // Behavior-dependent clip button state
+    if (state.boundsBehavior === 'hide'){
+      clipDrawBtn.setAttribute('disabled','true');
+    } else {
+      clipDrawBtn.removeAttribute('disabled');
+    }
   }
 
   // Shake-to-clear
